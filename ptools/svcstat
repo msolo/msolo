@@ -1,0 +1,126 @@
+#!/usr/bin/env python
+
+import operator
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+
+from optparse import OptionParser
+
+__author__ = 'Mike Solomon <mas63 @t cornell d0t edu>'
+__version__ = '0.2'
+__license__ = 'BSD License'
+
+parser = OptionParser()
+parser.add_option('-f', '--strace-file', default=None)
+parser.add_option('-l', '--limit', type='int', default=20)
+parser.add_option('-m', '--lsof-file', default=None)
+parser.add_option('-n', '--suppress-name-lookup', action='store_true',
+                  default=False)
+parser.add_option('-p', dest='pid', type='str')
+parser.add_option('-s', '--sample-time', type='int', default=10)
+parser.add_option('-x', '--extended-stats', action='store_true', default=False)
+(options, args) = parser.parse_args()
+
+pid = options.pid
+
+strace_path = pid + '.strace'
+strace_cmd = [
+  'strace', '-qTp', pid,
+  '-etrace=open,read,write,close,fstat,stat,lstat,select,poll,connect,recv,recvfrom,send,sendto',
+  '-o', strace_path]
+strace_proc = subprocess.Popen(strace_cmd)
+
+time.sleep(options.sample_time)
+
+os.kill(strace_proc.pid, signal.SIGTERM)
+strace_proc.wait()
+
+fd_parse_pattern = re.compile(
+  '^(read|write|select|recv|send)\((\d+),.*<([0-9\.]+)>$')
+
+times_by_fd = {}
+
+strace_file = open(strace_path)
+for line in strace_file:
+  match = fd_parse_pattern.match(line)
+  if match:
+    syscall, fd, exec_time = match.groups()
+    fd = int(fd)
+    exec_time = float(exec_time)
+    
+    # fixme: this is a hack based on our limited use of "select" - we only
+    # select on one fd at a time, so it's the max_fd - 1 
+    if syscall == 'select':
+      fd -= 1
+
+    try:
+      times_by_fd[fd].append(exec_time)
+    except KeyError:
+      times_by_fd[fd] = [exec_time,]
+
+strace_file.close()
+
+time_by_fd = [(fd, sum(time_list))
+              for fd, time_list in times_by_fd.iteritems()]
+  
+top_fd_time_list = sorted(time_by_fd, key=operator.itemgetter(1),
+                          reverse=True)[:options.limit]
+fd_list = ','.join([str(x[0]) for x in sorted(top_fd_time_list)])
+
+lsof_cmd = ['lsof', '-alMPp', pid, '-d', fd_list, ]
+if options.suppress_name_lookup:
+  lsof_cmd.append('-n')
+  
+lsof_proc = subprocess.Popen(lsof_cmd, stdout=subprocess.PIPE)
+lsof_proc.wait()
+lsof_data = lsof_proc.stdout.read()
+#print "lsof_data", lsof_data
+
+lsof_fd_parse_pattern = re.compile('^(\d+)(.)')
+fd_name_map = {}
+for line in lsof_data.split('\n')[1:]:
+  fields = line.strip().split()
+  if fields:
+    #print "fields", fields
+    try:
+      fd, fd_type = lsof_fd_parse_pattern.match(fields[3]).groups()
+    except Exception, e:
+      print "error", e, line
+    name = fields[7]
+    fd_name_map[int(fd)] = name
+
+if options.extended_stats:
+  print "fd <name> min/avg/max/std_dev (ms) total count"
+else:
+  print "fd <name> avg+std_dev (ms) total count"
+  
+for fd, cumulative_time in top_fd_time_list:
+  time_list = times_by_fd[fd]
+  _min = min(time_list)
+  _max = max(time_list)
+  _count = len(time_list)
+  _avg = (cumulative_time / _count)
+  sdsq = sum([(x-_avg)**2 for x in time_list])
+  _std_dev = (sdsq / (_count - 1 or 1)) ** 0.5
+  # use milliseconds - easier on the eyes
+  _min *= 1000
+  _max *= 1000
+  _avg *= 1000
+  _std_dev *= 1000
+  cumulative_time *= 1000
+  try:
+    name = fd_name_map[fd].split('->')[-1]
+  except KeyError, e:
+    name = 'unknown %u' % fd
+  if name in ('No', "can't"):
+    name = 'unknown %u' % fd
+
+  if options.extended_stats:
+    print '%(name)-21s %(_min) 7.3f /%(_avg) 7.3f /%(_max) 7.3f /%(_std_dev) 7.3f %(cumulative_time) 8.3f %(_count) 5u' % vars()
+  else:
+    expect_worst_case = _avg + _std_dev
+    print '%(name)-21s %(_std_dev) 7.3f %(cumulative_time) 8.3f %(_count) 5u' % vars()
