@@ -8,6 +8,7 @@ __author__ = 'Mike Solomon <mas63 @t cornell d0t edu>'
 __version__ = '0.2'
 __license__ = 'BSD License'
 
+
 # pcalls - primitive calls, no recursive calls are counted
 # time - probably the most useful by default
 # fallout2 - sort by cumulative time per call
@@ -287,7 +288,7 @@ def load(filename):
 	elif ext in ('.pstats',):
 		return BrowseableStats(filename)
 
-	raise Exception("unknown file extention: '%s'" % ext)
+	raise Exception("unknown file extension: '%s'" % ext)
 	
 def load_hotshot_profile(filename):
 	import hotshot.stats
