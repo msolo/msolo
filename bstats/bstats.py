@@ -130,139 +130,139 @@ functions, but occaisionally I find it useful.
 pstats.Stats.sort_arg_dict_default['fallout'] = (
   ((1, 1), (3,-1)), "fallout function")
 
-class BrowseableStats(pstats.Stats):		
- 	def get_top_items(self, sort_key, count, filter_function=None):
-		self.sort_stats(sort_key)
-		if filter_function:
-			return filter_function(self.fcn_list)[:count]
-		return self.fcn_list[:count]
+class BrowseableStats(pstats.Stats):
+  def get_top_items(self, sort_key, count, filter_function=None):
+    self.sort_stats(sort_key)
+    if filter_function:
+      return filter_function(self.fcn_list)[:count]
+    return self.fcn_list[:count]
 
-	# return a list of calling functions
-	# sorted by descending call counts
-	def get_func_caller_counts(self, func):
-		func = convert_function(func)
-		try:
-			(primitive_call_count, total_call_count, total_time, cumulative_time,
-			 caller_dict) = self.stats[func]
-			callers = sorted([
-				(call_count, caller_func)
-				for caller_func, call_count in caller_dict.iteritems()], reverse=True)
-			return [(x[1], x[0]) for x in callers]
-		except KeyError, e:
-			raise
+  # return a list of calling functions
+  # sorted by descending call counts
+  def get_func_caller_counts(self, func):
+    func = convert_function(func)
+    try:
+      (primitive_call_count, total_call_count, total_time, cumulative_time,
+       caller_dict) = self.stats[func]
+      callers = sorted([
+        (call_count, caller_func)
+        for caller_func, call_count in caller_dict.iteritems()], reverse=True)
+      return [(x[1], x[0]) for x in callers]
+    except KeyError, e:
+      raise
 
-	# return a list of called functions
-	# sorted by descending call counts
-	def get_func_callee_counts(self, func):
-		func = convert_function(func)
-		self.calc_callees()
-		try:
-			callee_dict = self.all_callees[func]
-			callees = sorted([
-				(call_count, caller_func)
-				for caller_func, call_count in callee_dict.iteritems()], reverse=True)
-			return [(x[1], x[0]) for x in callees]
-		except KeyError, e:
-			raise
+  # return a list of called functions
+  # sorted by descending call counts
+  def get_func_callee_counts(self, func):
+    func = convert_function(func)
+    self.calc_callees()
+    try:
+      callee_dict = self.all_callees[func]
+      callees = sorted([
+        (call_count, caller_func)
+        for caller_func, call_count in callee_dict.iteritems()], reverse=True)
+      return [(x[1], x[0]) for x in callees]
+    except KeyError, e:
+      raise
 
-	def get_common_call_chain(self, func, max_depth=20):
-		func = convert_function(func)
-		(primitive_call_count, total_call_count, total_time, cumulative_time,
-		 caller_dict) = self.stats[func]
-		call_chain = [(func, total_call_count)]
-		max_depth -= 1
-		while max_depth:
-			most_common_caller = self.get_func_caller_counts(call_chain[-1][0])[0]
-			if most_common_caller in call_chain:
-				raise Exception("recursive call detected: %s" % most_common_caller)
-			call_chain.append(most_common_caller)
-			max_depth -= 1
+  def get_common_call_chain(self, func, max_depth=20):
+    func = convert_function(func)
+    (primitive_call_count, total_call_count, total_time, cumulative_time,
+     caller_dict) = self.stats[func]
+    call_chain = [(func, total_call_count)]
+    max_depth -= 1
+    while max_depth:
+      most_common_caller = self.get_func_caller_counts(call_chain[-1][0])[0]
+      if most_common_caller in call_chain:
+        raise Exception("recursive call detected: %s" % most_common_caller)
+      call_chain.append(most_common_caller)
+      max_depth -= 1
 
-		return call_chain
+    return call_chain
 
-	def print_func_list(self, func_list):
-		self.print_title()
-		for f in func_list:
-			self.print_line(f)
+  def print_func_list(self, func_list):
+    self.print_title()
+    for f in func_list:
+      self.print_line(f)
 
-	def print_top_items(self, sort_key, count, filter_func=None):
-		self.print_func_list(self.get_top_items(sort_key, count, filter_func))
+  def print_top_items(self, sort_key, count, filter_func=None):
+    self.print_func_list(self.get_top_items(sort_key, count, filter_func))
 
-	def print_func_callers(self, func):
-		self.print_func_caller_list(self.get_func_caller_counts(func))
+  def print_func_callers(self, func):
+    self.print_func_caller_list(self.get_func_caller_counts(func))
 
-	def print_func_callees(self, func):
-		self.print_func_caller_list(self.get_func_callee_counts(func))
+  def print_func_callees(self, func):
+    self.print_func_caller_list(self.get_func_callee_counts(func))
 
-	def print_func_caller_list(self, func_list):
-		print ' ' * 8,
-		self.print_title()
-		for caller_func, caller_count in func_list:
-			print '[%5s]' % caller_count,
-			self.print_line(caller_func)
+  def print_func_caller_list(self, func_list):
+    print ' ' * 8,
+    self.print_title()
+    for caller_func, caller_count in func_list:
+      print '[%5s]' % caller_count,
+      self.print_line(caller_func)
 
-	def print_common_call_chain(self, func, max_depth=20):
-		self.print_func_caller_list(self.get_common_call_chain(func, max_depth))
+  def print_common_call_chain(self, func, max_depth=20):
+    self.print_func_caller_list(self.get_common_call_chain(func, max_depth))
 
   # build a dictionary of function stats (mostly for printing)
-	def func_stats(self, func):
-		d = {}
-		cc, nc, tt, ct, callers = self.stats[func]
-		c = str(nc)
-		if nc != cc:
-			c = c + '/' + str(cc)
-			d['rcalls'] = cc
-		else:
-			d['rcalls'] = ''
-			
-		d['call_str'] = c
-		d['ncalls'] = nc
-		d['tottime'] = tt
-		try:
-			d['percall'] = tt/nc
-		except ZeroDivisionError:
-			d['percall'] = 'inf'
-			
-		d['cumtime'] = ct
-		try:
-			d['cumpercall'] = ct/cc
-		except ZeroDivisionError:
-			d['cumpercall'] = 'inf'
-			
-		d['func_name'] = pstats.func_std_string(func)
-		return d
+  def func_stats(self, func):
+    d = {}
+    cc, nc, tt, ct, callers = self.stats[func]
+    c = str(nc)
+    if nc != cc:
+      c = c + '/' + str(cc)
+      d['rcalls'] = cc
+    else:
+      d['rcalls'] = ''
+      
+    d['call_str'] = c
+    d['ncalls'] = nc
+    d['tottime'] = tt
+    try:
+      d['percall'] = tt/nc
+    except ZeroDivisionError:
+      d['percall'] = 'inf'
+      
+    d['cumtime'] = ct
+    try:
+      d['cumpercall'] = ct/cc
+    except ZeroDivisionError:
+      d['cumpercall'] = 'inf'
+      
+    d['func_name'] = pstats.func_std_string(func)
+    return d
 
-	def call_count_filter(self, call_count):
-		def filter_function(function_list):
-			results = []
-			for func in function_list:
-				stats = self.func_stats(func)
-				if stats['ncalls'] == call_count:
-					results.append(func)
-			return results
-		return filter_function
+  def call_count_filter(self, call_count):
+    def filter_function(function_list):
+      results = []
+      for func in function_list:
+        stats = self.func_stats(func)
+        if stats['ncalls'] == call_count:
+          results.append(func)
+      return results
+    return filter_function
   
-	def sort_stats(self, *field):
-		if field[0] == FALLOUT2:
-			return self.fallout2_sort_stats()
-		else:
-			return pstats.Stats.sort_stats(self, *field)
+  def sort_stats(self, *field):
+    if field[0] == FALLOUT2:
+      return self.fallout2_sort_stats()
+    else:
+      return pstats.Stats.sort_stats(self, *field)
 
-	# sort by the largest amount of cumulative time spent per-call
-	def fallout2_sort_stats(self):
-		stats_list = []
-		for func, (cc, nc, tt, ct, callers) in self.stats.iteritems():
-			cumulative_percall = 0
-			if cc != 0:
-				cumulative_percall = ct / cc
-			stats_list.append((cumulative_percall, func))
+  # sort by the largest amount of cumulative time spent per-call
+  def fallout2_sort_stats(self):
+    stats_list = []
+    for func, (cc, nc, tt, ct, callers) in self.stats.iteritems():
+      cumulative_percall = 0
+      if cc != 0:
+        cumulative_percall = ct / cc
+      stats_list.append((cumulative_percall, func))
 
-		stats_list.sort(reverse=True)
+    stats_list.sort(reverse=True)
 
-		self.fcn_list = [fcn_tuple[-1] for fcn_tuple in stats_list]
-		return self
+    self.fcn_list = [fcn_tuple[-1] for fcn_tuple in stats_list]
+    return self
 
-	
+  
 # this will parse a string into the bits for a function tuple
 func_pattern = re.compile('(.*):(\d+)\((.*)\)')
 
@@ -270,30 +270,30 @@ func_pattern = re.compile('(.*):(\d+)\((.*)\)')
 # handy when you are reading through a stack and want to get info about
 # a function - you can just copy/paste this
 def fs2ft(s):
-	file, line, fname = func_pattern.match(s).groups()
-	return file, int(line), fname
+  file, line, fname = func_pattern.match(s).groups()
+  return file, int(line), fname
 
 # convert a function string to tuple if necessary
 def convert_function(func):
-	if isinstance(func, str):
-		return fs2ft(func)
-	return func
+  if isinstance(func, str):
+    return fs2ft(func)
+  return func
 
 
 # load stats data from either raw profiling info, or a marshaled pstats file
 def load(filename):
-	path, ext = os.path.splitext(filename)
-	if ext in ('.prof', '.hotshot'):
-		return load_hotshot_profile(filename)
-	elif ext in ('.pstats',):
-		return BrowseableStats(filename)
+  path, ext = os.path.splitext(filename)
+  if ext in ('.prof', '.hotshot'):
+    return load_hotshot_profile(filename)
+  elif ext in ('.pstats',):
+    return BrowseableStats(filename)
 
-	raise Exception("unknown file extension: '%s'" % ext)
-	
+  raise Exception("unknown file extension: '%s'" % ext)
+  
 def load_hotshot_profile(filename):
-	import hotshot.stats
-	stats = hotshot.stats.load(filename)
-	pstats_path = os.path.splitext(filename)[0] + '.pstats'
-	stats.dump_stats(pstats_path)
-	bs = BrowseableStats(pstats_path)
-	return bs
+  import hotshot.stats
+  stats = hotshot.stats.load(filename)
+  pstats_path = os.path.splitext(filename)[0] + '.pstats'
+  stats.dump_stats(pstats_path)
+  bs = BrowseableStats(pstats_path)
+  return bs
