@@ -1,0 +1,48 @@
+Functionality:
+ * macro syntax and substitution system
+   * need to make the parser arbitrarily start on some piece of text and parse
+     it out without assuming a template structure
+     * need this when you are translating a block that doesn't have pure text
+       and contains placeholders that need to be compiled
+   * how to handle something like the #i18n block - it can be evaluated at
+     compile time
+   * want to save an intermediate representation to make it fast to do many
+     versions of a single language
+   * do you want to allow arbitrary nesting and tagging?
+   * should you have a different (shorthand?) syntax for args?
+     * could borrow the _() function from gettext
+ * how do we do template import?
+   * it's really going to be multiple inheritence, but can i make it less
+     shady from a designer standpoint? maybe that's how i implement the 
+     #include directive - but check at runtime that it's a library?
+     * does that check buy you anything?
+ * make #library directive to disambiguate template includes
+ * import raw file include?
+ * implement array slicing?
+ * add native support for 'elif' clause
+   * is this a codegen or parsing problem?
+ * implement dictionary literals
+ * while loop (repeat?) what is the difference?
+ * test keyword args to functions with literals and complex placeholders
+ * add #encoding directive
+ * emulate virtual odd/even var in loops
+ * #set directive
+ * add a build time/version attribute
+ * xhtml-oriented front end
+
+Optimization:
+ * factor out placeholder lookups in loops
+ * collapse placeholders and adjacent text nodes so we end up doing fewer
+   buffer.write operations and do simple string subsitution
+ * collapse functions that comprise of a single text node to a return a unicode
+   string constant
+
+Cleanup:
+ * analyzer is still a bit foul
+   * want to make it possible to arbitrarily modify the tree without a copy
+   * generic child_nodes array is probably no longer useful
+ * make the grammar file as simple as possible
+ * why do i have 'code gen' in the semantic analysis phase? passing around
+   variables etc for get_var/has_var seems ugly.
+ * crunner is a bit foul - might be better to have separate front end for tests
+   * borrow more code from sparrow-compile
