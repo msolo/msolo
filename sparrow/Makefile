@@ -7,6 +7,7 @@ ifndef YAPPS
 endif
 
 CRUNNER = scripts/crunner.py
+COMPILER = scripts/sparrow-compile
 
 sparrow/compiler/parser.py: sparrow/compiler/parser.g
 	$(YAPPS) sparrow/compiler/parser.g
@@ -18,16 +19,16 @@ all: parser
 
 .PHONY : no_whitespace_tests
 no_whitespace_tests: clean_tests parser
-	$(CRUNNER) -qo tests/*txt tests/*tmpl
+	$(COMPILER) tests/*txt tests/*tmpl
 	$(CRUNNER) --test-input tests/input/search_list_data.pye -qt tests/*txt tests/*tmpl
-	$(CRUNNER) -O1 -qo tests/*txt tests/*tmpl
+	$(COMPILER) -O1 tests/*txt tests/*tmpl
 	$(CRUNNER) -O1 --test-input tests/input/search_list_data.pye -qt tests/*txt tests/*tmpl
 
 .PHONY : whitespace_tests
 whitespace_tests: clean_tests parser
-	$(CRUNNER) --preserve-optional-whitespace -qo tests/*txt tests/*tmpl
+	$(COMPILER) --preserve-optional-whitespace tests/*txt tests/*tmpl
 	$(CRUNNER) --preserve-optional-whitespace --test-input tests/input/search_list_data.pye --test-output output-preserve-whitespace -qt tests/*txt tests/*tmpl
-	$(CRUNNER) -O1 --preserve-optional-whitespace -qo tests/*txt tests/*tmpl
+	$(COMPILER) -O1 --preserve-optional-whitespace tests/*txt tests/*tmpl
 	$(CRUNNER) -O1 --preserve-optional-whitespace --test-input tests/input/search_list_data.pye --test-output output-preserve-whitespace -qt tests/*txt tests/*tmpl
 
 .PHONY : tests

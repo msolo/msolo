@@ -13,10 +13,10 @@ class SemanticAnalyzerError(Exception):
   pass
 
 class AnalyzerOptions(object):
-  collapse_adjacent_text = False
-  collapse_optional_whitespace = False
 
   def __init__(self, **kargs):
+    self.collapse_adjacent_text = False
+    self.collapse_optional_whitespace = False
     self.__dict__.update(kargs)
   def update(self, **kargs):
     self.__dict__.update(kargs)
@@ -36,8 +36,8 @@ optimizer_map = {
 # even though this uses memory, i'll make a copy instead of decorating the
 # original tree so i can compare the differences
 class SemanticAnalyzer(object):
-  def __init__(self, filename, parse_root, options=default_options):
-    self.filename = filename
+  def __init__(self, classname, parse_root, options=default_options):
+    self.classname = classname
     self.parse_root = parse_root
     self.options = options
     self.ast_root = None
@@ -70,7 +70,7 @@ class SemanticAnalyzer(object):
   
   def analyzeTemplateNode(self, pnode):
     self.template = pnode.copy(copy_children=False)
-    self.template.classname = filename2classname(self.filename)
+    self.template.classname = self.classname
     for pn in pnode.child_nodes:
       self.template.main_function.extend(self.build_ast(pn))
     self.optimize_child_nodes(self.template.main_function.child_nodes)
@@ -210,9 +210,5 @@ class SemanticAnalyzer(object):
         optimized_nodes.append(n)
     #print "optimized_nodes", node_list, optimized_nodes
     node_list[:] = optimized_nodes
-
-def filename2classname(filename):
-  return os.path.splitext(
-    os.path.basename(filename))[0].lower().replace('-', '_')
 
       

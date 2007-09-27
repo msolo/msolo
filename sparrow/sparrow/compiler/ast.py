@@ -65,6 +65,8 @@ class BinOpNode(ASTNode):
     return '%s (%s %s %s)' % (
       self.__class__.__name__, self.left, self.operator, self.right)
 
+class AssignNode(BinOpNode):
+  pass
 
 class BreakNode(ASTNode):
   pass

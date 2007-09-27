@@ -40,7 +40,7 @@ class CodeGenerator(object):
   def get_code(self):
     code_root = self.build_code(self.ast_root)[0]
     self.write_python(code_root, indent_level=-1)
-    return self.output.getvalue()
+    return self.output.getvalue().encode(self.ast_root.encoding)
 
   def generate_python(self, code_node):
     try:
@@ -85,7 +85,7 @@ class CodeGenerator(object):
     for n in node.extends_nodes:
       extends.append(self.generate_python(self.build_code(n)[0]))
     if not extends:
-      extends = ['sparrow.runtime.template.CheeterTemplate']
+      extends = ['sparrow.runtime.template.SparrowTemplate']
 
     extends_clause = ', '.join(extends)
     classname = node.classname
@@ -236,6 +236,12 @@ class CodeGenerator(object):
     right = self.generate_python(self.build_code(node.right)[0])
     operator = node.operator
     return [CodeNode('(%(left)s %(operator)s %(right)s)' % vars())]
+
+  def codegenASTAssignNode(self, node):
+    left = self.generate_python(self.build_code(node.left)[0])
+    right = self.generate_python(self.build_code(node.right)[0])
+    operator = node.operator
+    return [CodeNode('%(left)s %(operator)s %(right)s' % vars())]
 
   def codegenASTUnaryOpNode(self, node):
     expression = self.generate_python(self.build_code(node.expression)[0])

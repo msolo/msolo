@@ -1,3 +1,8 @@
+0.5.3 - share more code between the crunner and sparrow compile. rework the
+code for handling dynamic template compile and loading. added a basic demo of
+an attribute language like TAL or Kid. mostly proves that the AST can support
+another syntax without much effort.
+
 0.5.2 - implemented optional whitespace and adjacent text node collapsing in
 the analyzer (instead of codegen). added corresponding tests for -01 mode.
 

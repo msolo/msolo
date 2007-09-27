@@ -34,6 +34,22 @@ Optimization:
  * factor out placeholder lookups in loops
  * collapse placeholders and adjacent text nodes so we end up doing fewer
    buffer.write operations and do simple string subsitution
+
+Variant 1:
+        write(u"""<td>""") 
+        write("%s" % column)
+        write(u"""</td>\n""")
+
+Variant 1.1:
+        write(u"""<td>""") 
+        write(str(column))
+        write(u"""</td>\n""")
+
+Variant 2:
+        write(u"""<td>%s</td>\n""" % column)
+
+   * optimization of this loop is very version dependent
+   * Example
  * collapse functions that comprise of a single text node to a return a unicode
    string constant
 

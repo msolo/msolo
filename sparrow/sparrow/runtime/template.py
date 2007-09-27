@@ -1,7 +1,8 @@
 # an 'abstract' base class for a template, seems like a good idea for now
 
-import StringIO
-
+#import StringIO
+import cStringIO as StringIO
+import repeater
 
 # sentinel class, in case you want to have a default that is None
 class __Unspecified(object):
@@ -13,12 +14,14 @@ class PlaceholderError(KeyError):
   pass
 
 
-class CheeterTemplate(object):
+class SparrowTemplate(object):
   def __init__(self, search_list=None):
     self.search_list = search_list
-
+    self.repeat = repeater.RepeatTracker()
+    
   # FIXME: i'm sure this is a little pokey - might be able to speed this up
-  # somehow. not sure if it's better to look before leaping or raise
+  # somehow. not sure if it's better to look before leaping or raise.
+  # might also want to let users tune whether to prefer keys or attributes
   def resolve_placeholder(self, name, local_vars, default=Unspecified):
     try:
       return local_vars[name]

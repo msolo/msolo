@@ -10,9 +10,9 @@ class UDNResolveError(Exception):
 # TODO - optimize performance
 def resolve_udn(_object, name):
   try:
-    return _object.name
+    return getattr(_object, name)
   except AttributeError:
     try:
       return _object[name]
-    except KeyError:
+    except (KeyError, TypeError):
       raise UDNResolveError(name, dir(_object))

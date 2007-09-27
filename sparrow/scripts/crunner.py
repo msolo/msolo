@@ -3,15 +3,16 @@
 import imp
 import os.path
 import sys
+import traceback
 
 from pprint import pprint
 
 import sparrow.compiler.parser
 import sparrow.compiler.scanner
 import sparrow.compiler.analyzer
+import sparrow.compiler.util
 analyzer = sparrow.compiler.analyzer
 
-import sparrow.compiler.codegen
 import sparrow.runtime.runner
 
 
@@ -22,10 +23,6 @@ def print_tree_walk(node, indent=0):
   for n in node.child_nodes:
     print_tree_walk(n, indent + 1)
 
-def parse(rule, text):
-  parser = sparrow.compiler.parser.SparrowParser(
-    sparrow.compiler.scanner.SparrowScanner(text))
-  return sparrow.compiler.parser.wrap_error_reporter(parser, rule)
 
 def process_file(filename, options):
   print_lines = []
@@ -38,36 +35,23 @@ def process_file(filename, options):
   opt = analyzer.optimizer_map[options.optimizer_level]
   opt.update(collapse_optional_whitespace=options.ignore_optional_whitespace)
 
-  classname = sparrow.compiler.analyzer.filename2classname(filename)
+  classname = sparrow.compiler.util.filename2classname(filename)
   try:
     print_output("compile", filename)
-    f = open(filename, 'r')
-    source_data = f.read().decode('utf8')
-    parse_root = parse('goal', source_data)
-
     if not options.quiet:
-      #print "parse_root"
-      #pprint(parse_root)
       print "parse_root walk"
+      parse_root = sparrow.compiler.util.parse_file(filename)
       print_tree_walk(parse_root)
-
-    ast_root = sparrow.compiler.analyzer.SemanticAnalyzer(
-      filename, parse_root, opt).get_ast()
     
     if not options.quiet:
-      #print "ast_root"
-      #pprint(ast_root)
       print "ast_root walk"
+      ast_root = sparrow.compiler.analyzer.SemanticAnalyzer(
+        classname, parse_root, options=opt).get_ast()
       print_tree_walk(ast_root)
 
     if not options.quiet:
-      print "generate python code"
-
-    code_generator = sparrow.compiler.codegen.CodeGenerator(ast_root)
-
-    src_code = code_generator.get_code()
-    if not options.quiet:
       print "src_code"
+      src_code = sparrow.compiler.util.compile_file(filename, options=opt)
       for i, line in enumerate(src_code.split('\n')):
         print '% 3s' % (i + 1), line
   except Exception, e:
@@ -75,33 +59,7 @@ def process_file(filename, options):
     raise
 
   if options.test:
-
-    #print >> sys.stderr, "test", classname, '...',
     print_output("test", classname, '...')
-
-    test_module_filename = 't.py'
-    module_file = open(test_module_filename, 'w')
-    module_file.write(src_code)
-    module_file.close()
-    module_file = open(test_module_filename, 'r')
-
-    try:
-      imp.load_source(classname, test_module_filename, module_file)
-    except Exception, e:
-      current_output = str(e)
-      raised_exception = True
-      print >> sys.stderr, "FAILED:", classname, current_output
-      raise
-      
-    module_file.close()
-    try:
-      os.remove(test_module_filename)
-    except OSError, e:
-      print >> sys.stderr, "ERROR:", e
-    try:
-      os.remove(test_module_filename + 'c')
-    except OSError, e:
-      print >> sys.stderr, "ERROR:", e
 
     if options.test_input:
       search_list = [
@@ -111,7 +69,9 @@ def process_file(filename, options):
       
     raised_exception = False
     try:
-      class_object = getattr(__import__(classname), classname)
+      module_name='tests.%s' % classname
+      class_object = sparrow.compiler.util.load_template_file(
+        filename, module_name, options=opt)
       template = class_object(search_list=search_list)
       current_output = template.main().encode('utf8')
     except Exception, e:
@@ -147,19 +107,13 @@ def process_file(filename, options):
         print >> sys.stderr, ' '.join(line)
       print >> sys.stderr, "FAILED:", classname
       print >> sys.stderr, '  diff -u', test_output_path, current_output_path
-      print >> sys.stderr, '  crunner.py -to', filename
+      print >> sys.stderr, '  %s -t' % sys.argv[0], filename
       if raised_exception:
         print >> sys.stderr, current_output
       
     else:
       print_output('OK')
 
-  if options.output:
-    genfile_name = '%s.py' % classname
-    genfile_path = os.path.join(os.path.dirname(filename), genfile_name)
-    outfile = open(genfile_path, 'w')
-    outfile.write(src_code)
-    outfile.close()
 
 if __name__ == '__main__':
   from optparse import OptionParser
@@ -174,8 +128,6 @@ if __name__ == '__main__':
           default=True, dest='ignore_optional_whitespace',
           help='preserve leading whitespace before a directive')
   op.add_option('-q', '--quiet', action='store_true', default=False)
-  op.add_option('-o', '--output', action='store_true', default=False,
-          help='save generated files')
   op.add_option('-O', dest='optimizer_level', type='int', default=0)
   (options, args) = op.parse_args()
 

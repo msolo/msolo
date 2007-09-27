@@ -1,13 +1,14 @@
 from distutils.core import setup
+
 import sparrow
 
 setup(
     name="sparrow",
-    version=sparrow.version,
+    version=sparrow.__version__,
     description="text-to-python template language",
-    author="Mike Solomon",
-    author_email="mas63 @t cornell d0t edu",
-    license="BSD-style",
+    author=sparrow.__author__,
+    author_email=sparrow.__author_email__,
+    license=sparrow.__license__,
     download_url="",
     platforms=["Posix", "MacOS X", "Windows"],
     classifiers=["Development Status :: 3 - Alpha",
