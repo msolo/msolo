@@ -15,7 +15,6 @@ copies made during this phase -- compile is a one-time operation, but it feels
 like it's getting ridiculous. this emits some partially optimzed code, and 
 although the tests pass, I wouldn't use it at the moment.
 
-
 0.5.3 - share more code between the crunner and sparrow compile. rework the
 code for handling dynamic template compile and loading. added a basic demo of
 an attribute language like TAL or Kid. mostly proves that the AST can support

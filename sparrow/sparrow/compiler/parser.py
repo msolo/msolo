@@ -560,7 +560,7 @@ class SparrowParser(Parser):
         while self._peek("'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*or[ \\t]*'":
             self._scan("'[ \\t]*or[ \\t]*'")
             and_test = self.and_test()
-            _test = BinOpNode('or', _test, and_test)
+            _test = BinOpExpressionNode('or', _test, and_test)
         return _test
 
     def and_test(self):
@@ -569,7 +569,7 @@ class SparrowParser(Parser):
         while self._peek("'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*and[ \\t]*'":
             self._scan("'[ \\t]*and[ \\t]*'")
             not_test = self.not_test()
-            _test = BinOpNode('and', _test, not_test)
+            _test = BinOpExpressionNode('and', _test, not_test)
         return _test
 
     def not_test(self):
@@ -598,15 +598,15 @@ class SparrowParser(Parser):
         while self._peek("'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\*[ \\t]*'":
             self._scan("'[ \\t]*\\*[ \\t]*'")
             u_expr = self.u_expr()
-            _expr = BinOpNode('*', _expr, u_expr)
+            _expr = BinOpExpressionNode('*', _expr, u_expr)
         while self._peek("'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\/[ \\t]*'":
             self._scan("'[ \\t]*\\/[ \\t]*'")
             u_expr = self.u_expr()
-            _expr = BinOpNode('\\', _expr, u_expr)
+            _expr = BinOpExpressionNode('\\', _expr, u_expr)
         while self._peek("'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\%[ \\t]*'":
             self._scan("'[ \\t]*\\%[ \\t]*'")
             u_expr = self.u_expr()
-            _expr = BinOpNode('%', _expr, u_expr)
+            _expr = BinOpExpressionNode('%', _expr, u_expr)
         return _expr
 
     def a_expr(self):
@@ -615,11 +615,11 @@ class SparrowParser(Parser):
         while self._peek("'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\+[ \\t]*'":
             self._scan("'[ \\t]*\\+[ \\t]*'")
             m_expr = self.m_expr()
-            _expr = BinOpNode('+', _expr, m_expr)
+            _expr = BinOpExpressionNode('+', _expr, m_expr)
         while self._peek("'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\-[ \\t]*'":
             self._scan("'[ \\t]*\\-[ \\t]*'")
             m_expr = self.m_expr()
-            _expr = BinOpNode('-', _expr, m_expr)
+            _expr = BinOpExpressionNode('-', _expr, m_expr)
         return _expr
 
     def comparison(self):
@@ -628,7 +628,7 @@ class SparrowParser(Parser):
         while self._peek('COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == 'COMP_OPERATOR':
             COMP_OPERATOR = self._scan('COMP_OPERATOR')
             a_expr = self.a_expr()
-            _left_side = BinOpNode(COMP_OPERATOR.strip(), _left_side, a_expr)
+            _left_side = BinOpExpressionNode(COMP_OPERATOR.strip(), _left_side, a_expr)
         return _left_side
 
 
