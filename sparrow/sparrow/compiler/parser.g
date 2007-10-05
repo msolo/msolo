@@ -342,12 +342,12 @@ parser SparrowParser:
 
   rule or_test:
     and_test {{ _test = and_test }}
-    ( '[ \t]*or[ \t]*' and_test {{ _test = BinOpNode('or', _test, and_test) }} ) *
+    ( '[ \t]*or[ \t]*' and_test {{ _test = BinOpExpressionNode('or', _test, and_test) }} ) *
     {{ return _test }}
 
   rule and_test:
     not_test {{ _test = not_test }}
-    ( '[ \t]*and[ \t]*' not_test {{ _test = BinOpNode('and', _test, not_test) }} ) *
+    ( '[ \t]*and[ \t]*' not_test {{ _test = BinOpExpressionNode('and', _test, not_test) }} ) *
     {{ return _test }}
     
   rule not_test:
@@ -363,20 +363,20 @@ parser SparrowParser:
 
   rule m_expr:
     u_expr {{ _expr = u_expr }}
-    ( '[ \t]*\*[ \t]*' u_expr {{ _expr = BinOpNode('*', _expr, u_expr) }} ) *
-    ( '[ \t]*\/[ \t]*' u_expr {{ _expr = BinOpNode('\\', _expr, u_expr) }} ) *
-    ( '[ \t]*\%[ \t]*' u_expr {{ _expr = BinOpNode('%', _expr, u_expr) }} ) *
+    ( '[ \t]*\*[ \t]*' u_expr {{ _expr = BinOpExpressionNode('*', _expr, u_expr) }} ) *
+    ( '[ \t]*\/[ \t]*' u_expr {{ _expr = BinOpExpressionNode('\\', _expr, u_expr) }} ) *
+    ( '[ \t]*\%[ \t]*' u_expr {{ _expr = BinOpExpressionNode('%', _expr, u_expr) }} ) *
     {{ return _expr }}
 
 
   rule a_expr:
     m_expr {{ _expr = m_expr }}
-    ( '[ \t]*\+[ \t]*' m_expr {{ _expr = BinOpNode('+', _expr, m_expr) }} ) *
-    ( '[ \t]*\-[ \t]*' m_expr {{ _expr = BinOpNode('-', _expr, m_expr) }} ) *
+    ( '[ \t]*\+[ \t]*' m_expr {{ _expr = BinOpExpressionNode('+', _expr, m_expr) }} ) *
+    ( '[ \t]*\-[ \t]*' m_expr {{ _expr = BinOpExpressionNode('-', _expr, m_expr) }} ) *
     {{ return _expr }}
 
 
   rule comparison:
     a_expr {{ _left_side = a_expr }}
-    ( COMP_OPERATOR a_expr {{ _left_side = BinOpNode(COMP_OPERATOR.strip(), _left_side, a_expr) }} ) *
+    ( COMP_OPERATOR a_expr {{ _left_side = BinOpExpressionNode(COMP_OPERATOR.strip(), _left_side, a_expr) }} ) *
     {{ return _left_side }}

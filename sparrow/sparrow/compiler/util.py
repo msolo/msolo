@@ -3,10 +3,11 @@ import os.path
 import re
 import sys
 
-import sparrow.compiler.analyzer
 import sparrow.compiler.codegen
 import sparrow.compiler.parser
 import sparrow.compiler.scanner
+import sparrow.compiler.analyzer
+import sparrow.compiler.optimizer
 
 valid_identfier = re.compile('[a-z]\w*', re.IGNORECASE)
 
@@ -42,7 +43,9 @@ def compile_ast(parse_root,
                 options=sparrow.compiler.analyzer.default_options):
   ast_root = sparrow.compiler.analyzer.SemanticAnalyzer(
     classname, parse_root, options).get_ast()
-  code_generator = sparrow.compiler.codegen.CodeGenerator(ast_root)
+  sparrow.compiler.optimizer.OptimizationAnalyzer(
+    ast_root, options).optimize_ast()
+  code_generator = sparrow.compiler.codegen.CodeGenerator(ast_root, options)
   return code_generator.get_code()
 
 def compile_template(src_text, classname,

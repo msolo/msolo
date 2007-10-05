@@ -10,7 +10,9 @@ from pprint import pprint
 import sparrow.compiler.parser
 import sparrow.compiler.scanner
 import sparrow.compiler.analyzer
+import sparrow.compiler.optimizer
 import sparrow.compiler.util
+from sparrow.compiler.visitor import print_tree
 analyzer = sparrow.compiler.analyzer
 
 import sparrow.runtime.runner
@@ -33,7 +35,7 @@ def process_file(filename, options):
       print >> sys.stderr, ' '.join(args)
 
   opt = analyzer.optimizer_map[options.optimizer_level]
-  opt.update(collapse_optional_whitespace=options.ignore_optional_whitespace)
+  opt.update(strip_optional_whitespace=options.ignore_optional_whitespace)
 
   classname = sparrow.compiler.util.filename2classname(filename)
   try:
@@ -41,17 +43,26 @@ def process_file(filename, options):
     if not options.quiet:
       print "parse_root walk"
       parse_root = sparrow.compiler.util.parse_file(filename)
-      print_tree_walk(parse_root)
+      #print_tree_walk(parse_root)
+      #print_tree(parse_root)
     
     if not options.quiet:
       print "ast_root walk"
       ast_root = sparrow.compiler.analyzer.SemanticAnalyzer(
         classname, parse_root, options=opt).get_ast()
-      print_tree_walk(ast_root)
+      print_tree(ast_root)
+
+    if not options.quiet:
+      print "optimized ast_root walk"
+      sparrow.compiler.optimizer.OptimizationAnalyzer(
+        ast_root, options=opt).optimize_ast()
+      print_tree(ast_root)
 
     if not options.quiet:
       print "src_code"
-      src_code = sparrow.compiler.util.compile_file(filename, options=opt)
+      src_code = sparrow.compiler.codegen.CodeGenerator(
+        ast_root, opt).get_code()
+      #src_code = sparrow.compiler.util.compile_file(filename, options=opt)
       for i, line in enumerate(src_code.split('\n')):
         print '% 3s' % (i + 1), line
   except Exception, e:

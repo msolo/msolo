@@ -4,7 +4,10 @@ class ASTNode(object):
   def __init__(self, name=''):
     self.name = name
     self.value = None
-    self.child_nodes = NodeList()  
+    self.parent = None
+    self.child_nodes = NodeList()
+    # optimization annotations
+    self.hint_map = {}
 
   def __str__(self):
     if self.value:
@@ -13,6 +16,19 @@ class ASTNode(object):
 
   def __repr__(self):
     return self.__str__()
+
+  def __eq__(self, node):
+    return bool(type(self) == type(node) and
+                self.name == node.name and
+                self.value == node.value and
+                self.child_nodes == node.child_nodes)
+
+  def __hash__(self):
+    return hash('%s%s%s%s' %
+                (type(self), self.name, self.value, hash(tuple(self.child_nodes))))
+
+  def getChildNodes(self):
+    return [n for n in self.child_nodes if isinstance(n, ASTNode)]
   
   def append(self, node):
     if isinstance(node, list):
@@ -24,6 +40,20 @@ class ASTNode(object):
   def extend(self, node_list):
     for n in node_list:
       self.append(n)
+
+  def insert_before(self, marker_node, insert_node):
+    idx = self.child_nodes.index(marker_node)
+    self.child_nodes.insert(idx, insert_node)
+
+  def replace(self, marker_node, insert_node_list):
+    print "replace", type(self)
+    idx = self.child_nodes.index(marker_node)
+    try:
+      for n in reversed(insert_node_list):
+        self.child_nodes.insert(idx, n)
+    except TypeError:
+      self.child_nodes.insert(idx, insert_node_list)
+    self.child_nodes.remove(marker_node)
 
   def copy(self, copy_children=True):
     node = copy.deepcopy(self)
@@ -46,6 +76,9 @@ class _ListNode(ASTNode):
       self.extend(parg_list)
     if karg_list:
       self.extend(karg_list)
+
+  def __iter__(self):
+    return iter(self.child_nodes)
     
   def __str__(self):
     return '%s %s' % (ASTNode.__str__(self),
@@ -60,13 +93,25 @@ class BinOpNode(ASTNode):
     self.operator = operator
     self.left = left
     self.right = right
+
+  def replace(self, node, replacement_node):
+    if self.left is node:
+      self.left = replacement_node
+    elif self.right is node:
+      self.right = replacement_node
+    else:
+      raise Exception("neither left nor right expression matches target")
   
   def __str__(self):
     return '%s (%s %s %s)' % (
       self.__class__.__name__, self.left, self.operator, self.right)
 
-class AssignNode(BinOpNode):
+class BinOpExpressionNode(BinOpNode):
   pass
+
+class AssignNode(BinOpNode):
+  def __init__(self, left, right):
+    BinOpNode.__init__(self, '=', left, right)
 
 class BreakNode(ASTNode):
   pass
@@ -79,7 +124,13 @@ class CallFunctionNode(ASTNode):
       self.arg_list = arg_list
     else:
       self.arg_list = ArgListNode()
-  
+
+  def replace(self, node, replacement_node):
+    if self.expression is node:
+      self.expression = replacement_node
+    else:
+      raise Exception("expression doesn't mactch replacement")
+    
   def __str__(self):
     return '%s expr:%s arg_list:%s' % (
       self.__class__.__name__, self.expression, self.arg_list)
@@ -129,8 +180,16 @@ class FunctionInitNode(ASTNode):
 class FunctionNode(ASTNode):
   def __init__(self, *pargs, **kargs):
     ASTNode.__init__(self, *pargs, **kargs)
-    self.child_nodes = [FunctionInitNode(),
-              ReturnNode()]
+    new_buffer = CallFunctionNode(
+          GetAttrNode(IdentifierNode('self'), 'new_buffer'))
+
+    self.child_nodes = [
+      AssignNode(
+        AssignIdentifierNode('buffer'),
+        new_buffer),
+      ReturnNode(
+        CallFunctionNode(GetAttrNode(IdentifierNode('buffer'), 'getvalue'))),
+      ]
     self.parameter_list = ParameterListNode()
     
   def append(self, node):
@@ -140,17 +199,52 @@ class FunctionNode(ASTNode):
     return '%s parameter_list:%r' % (
       self.__class__.__name__, self.parameter_list)
 
-class GetUDNNode(ASTNode):
+
+class GetAttrNode(ASTNode):
   def __init__(self, expression, name):
     ASTNode.__init__(self)
     self.expression = expression
     self.name = name
 
+  def __eq__(self, node):
+    return bool(type(self) == type(node) and
+                self.name == node.name and
+                self.expression == node.expression)
+
+  def __hash__(self):
+    return hash('%s%s%s' %
+                (type(self), self.name, self.expression))
+
   def __str__(self):
     return '%s expr:%s . name:%s' % (
       self.__class__.__name__, self.expression, self.name)
 
+  def getChildNodes(self):
+    child_nodes = self.expression.getChildNodes()
+    child_nodes.append(self.expression)
+    if isinstance(self.name, ASTNode):
+      child_nodes.append(self.name)
+    return child_nodes
+
+  def replace(self, node, replacement_node):
+    if self.expression is node:
+      self.expression = replacement_node
+    else:
+      raise Exception("expression doesn't mactch replacement")
+
+class GetUDNNode(GetAttrNode):
+  pass
+
 class IdentifierNode(ASTNode):
+  # all subclasses of IdentifierNode should be treated as equivalent
+  def __eq__(self, node):
+    return bool(isinstance(node, IdentifierNode) and
+                self.name == node.name)
+
+  def __hash__(self):
+    return hash(self.name)
+
+class AssignIdentifierNode(IdentifierNode):
   pass
 
 class IfNode(ASTNode):
@@ -158,6 +252,12 @@ class IfNode(ASTNode):
     ASTNode.__init__(self)
     self.test_expression = test_expression
     self.else_ = NodeList()
+
+  def replace(self, node, replacement_node):
+    if self.test_expression is node:
+      self.test_expression = replacement_node
+    else:
+      ASTNode.replace(self, node, replacement_node)
     
   def __str__(self):
     return '%s test_expr:%s\nelse:\n  %s' % (
@@ -228,7 +328,12 @@ class PlaceholderSubstitutionNode(ASTNode):
     return '%s expr:%r' % (self.__class__.__name__, self.expression)
 
 class ReturnNode(ASTNode):
-  pass
+  def __init__(self, expression):
+    ASTNode.__init__(self)
+    self.expression = expression
+
+  def __str__(self):
+    return '%s expr:%r' % (self.__class__.__name__, self.expression)
 
 class SliceNode(ASTNode):
   def __init__(self, expression, slice_expression):
@@ -240,7 +345,7 @@ class SliceNode(ASTNode):
     return ('%s expr:%s [ %s ]' %
             (self.__class__.__name__, self.expression, self.slice_expression))
 
-class TargetNode(ASTNode):
+class TargetNode(IdentifierNode):
   pass
 
 class TargetListNode(_ListNode):

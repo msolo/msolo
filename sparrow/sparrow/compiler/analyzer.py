@@ -15,8 +15,24 @@ class SemanticAnalyzerError(Exception):
 class AnalyzerOptions(object):
 
   def __init__(self, **kargs):
+    self.debug = False
+    
+    self.strip_optional_whitespace = False
+
+    # adjacent text nodes become one single node
     self.collapse_adjacent_text = False
-    self.collapse_optional_whitespace = False
+    
+    # expensive dotted notations are aliased to a local variable for faster
+    # lookups: write = self.buffer.write
+    self.alias_invariants = False
+
+    # when a variable defined in a block later is accessed, just use the raw
+    # identifier, don't incure the cost of a resolve_placeholder call since you
+    # know that this local variable will always resolve first
+    self.directly_access_defined_variables = False
+
+    self.enable_psyco = False
+    
     self.__dict__.update(kargs)
   def update(self, **kargs):
     self.__dict__.update(kargs)
@@ -24,10 +40,17 @@ class AnalyzerOptions(object):
 default_options = AnalyzerOptions()
 o1_options = copy.copy(default_options)
 o1_options.collapse_adjacent_text = True
+o2_options = copy.copy(o1_options)
+o2_options.alias_invariants = True
+o2_options.directly_access_defined_variables = True
+o3_options = copy.copy(o2_options)
+o3_options.enable_psyco = True
 
 optimizer_map = {
   0: default_options,
   1: o1_options,
+  2: o2_options,
+  3: o3_options,
   }
 
 # convert the parse tree into something a bit more 'fat' and useful
@@ -35,6 +58,11 @@ optimizer_map = {
 # this should simplify the codegen stage into a naive traversal
 # even though this uses memory, i'll make a copy instead of decorating the
 # original tree so i can compare the differences
+# the other idea is that i can treat certain nodes as 'macros' to generate a
+# few nodes that are more python-like
+# additionally, there are some optimizations that are really more oriented at
+# the parse tree, so i do them inline here. it's a bit split-brain, but it's
+# seems easier.
 class SemanticAnalyzer(object):
   def __init__(self, classname, parse_root, options=default_options):
     self.classname = classname
@@ -42,7 +70,7 @@ class SemanticAnalyzer(object):
     self.options = options
     self.ast_root = None
     self.template = None
-
+    
   def get_ast(self):
     ast_node_list = self.build_ast(self.parse_root)
     if len(ast_node_list) != 1:
@@ -66,14 +94,16 @@ class SemanticAnalyzer(object):
     return ast_node_list
 
   def default_analyze_node(self, pnode):
+    #print "default_analyze_node", type(pnode)
     return [pnode.copy()]
   
   def analyzeTemplateNode(self, pnode):
     self.template = pnode.copy(copy_children=False)
     self.template.classname = self.classname
-    for pn in pnode.child_nodes:
+    for pn in self.optimize_parsed_nodes(pnode.child_nodes):
       self.template.main_function.extend(self.build_ast(pn))
-    self.optimize_child_nodes(self.template.main_function.child_nodes)
+
+    self.template.main_function = self.build_ast(self.template.main_function)[0]
     return [self.template]
 
   def analyzeForNode(self, pnode):
@@ -83,29 +113,32 @@ class SemanticAnalyzer(object):
       for_node.target_list.extend(self.build_ast(pn))
     for pn in pnode.expression_list.child_nodes:
       for_node.expression_list.extend(self.build_ast(pn))
-    for pn in pnode.child_nodes:
+    for pn in self.optimize_parsed_nodes(pnode.child_nodes):
       for_node.extend(self.build_ast(pn))
-    self.optimize_child_nodes(for_node.child_nodes)
+      
     return [for_node]
 
   def analyzeGetUDNNode(self, pnode):
-    get_udn_node = GetUDNNode(self.build_ast(pnode.expression)[0], pnode.name)
+    expression = self.build_ast(pnode.expression)[0]
+    get_udn_node = GetUDNNode(expression, pnode.name)
     return [get_udn_node]
+
+  def analyzeGetAttrNode(self, pnode):
+    expression = self.build_ast(pnode.expression)[0]
+    get_attr_node = GetAttrNode(expression, pnode.name)
+    return [get_attr_node]
 
   def analyzeIfNode(self, pnode):
     if_node = IfNode()
     if_node.test_expression = self.build_ast(pnode.test_expression)[0]
-    for pn in pnode.child_nodes:
+    for pn in self.optimize_parsed_nodes(pnode.child_nodes):
       if_node.extend(self.build_ast(pn))
-    for pn in pnode.else_:
+    for pn in self.optimize_parsed_nodes(pnode.else_):
       if_node.else_.extend(self.build_ast(pn))
-    self.optimize_child_nodes(if_node.child_nodes)
-    self.optimize_child_nodes(if_node.else_)
     return [if_node]
 
-
   def analyzeSliceNode(self, pnode):
-    snode = pnode
+    snode = pnode.copy()
     snode.expression = self.build_ast(pnode.expression)[0]
     snode.slice_expression = self.build_ast(pnode.slice_expression)[0]
     return [snode]
@@ -115,8 +148,7 @@ class SemanticAnalyzer(object):
     if pnode.name == 'library':
       self.template.library = True
     else:
-      self.template.main_function.name = pnode.name
-      
+      self.template.main_function.name = pnode.name      
     return []
 
   def analyzeImportNode(self, pnode):
@@ -140,7 +172,17 @@ class SemanticAnalyzer(object):
   def analyzeTextNode(self, pnode):
     if pnode.child_nodes:
       raise SemanticAnalyzerError("TextNode can't have children")
-    return [pnode.copy()]
+    f = CallFunctionNode(GetAttrNode(IdentifierNode('buffer'), 'write'))
+    f.arg_list.append(LiteralNode(pnode.value))
+    return [f]
+
+  analyzeOptionalWhitespaceNode = analyzeTextNode
+  analyzeWhitespaceNode = analyzeTextNode
+  analyzeNewlineNode = analyzeTextNode
+
+  # purely here for passthru and to remind me that it needs to be overridden
+  def analyzeFunctionNode(self, pnode):
+    return [pnode]
 
   def analyzeDefNode(self, pnode):
     #if not pnode.child_nodes:
@@ -150,12 +192,12 @@ class SemanticAnalyzer(object):
       function.parameter_list = self.build_ast(pnode.parameter_list)[0]
 
     function.parameter_list.child_nodes.insert(0,
-                           ParameterNode(name='self'))
-    for pn in pnode.child_nodes:
-      function.extend(self.build_ast(pn))
-      
-    self.optimize_child_nodes(function.child_nodes)
+                                               ParameterNode(name='self'))
     
+    for pn in self.optimize_parsed_nodes(pnode.child_nodes):
+      function.extend(self.build_ast(pn))
+
+    function = self.build_ast(function)[0]
     self.template.append(function)
     return []
 
@@ -168,17 +210,45 @@ class SemanticAnalyzer(object):
     #  raise SemanticAnalyzerError("BlockNode must have children")
     self.analyzeDefNode(pnode)
     function_node = CallFunctionNode()
-    function_node.expression = PlaceholderNode(pnode.name)
-    return [PlaceholderSubstitutionNode(function_node)]
+    function_node.expression = self.build_ast(PlaceholderNode(pnode.name))[0]
+    p = PlaceholderSubstitutionNode(function_node)
+    #print "analyzeBlockNode", id(p), p
+    return self.build_ast(p)
 
+  # note: we do a copy-thru to force analysis of the child nodes
   def analyzePlaceholderSubstitutionNode(self, pnode):
-    return [PlaceholderSubstitutionNode(
-      self.build_ast(pnode.expression)[0])]
+    #print "analyzePlaceholderSubstitutionNode", id(pnode), pnode
+    f = CallFunctionNode(GetAttrNode(IdentifierNode('buffer'), 'write'))
+    f.arg_list.append(BinOpNode('%', LiteralNode('%s'),
+                                self.build_ast(pnode.expression)[0]))
+    return self.build_ast(f)
+
+  def analyzePlaceholderNode(self, pnode):
+    f = CallFunctionNode(GetAttrNode(IdentifierNode('self'),
+                                     'resolve_placeholder'))
+    f.arg_list.append(LiteralNode(pnode.name))
+    f.arg_list.append(t_local_vars())
+    f.hint_map['resolve_placeholder'] = IdentifierNode(pnode.name)
+    return self.build_ast(f)
+
+  def analyzeBinOpNode(self, pnode):
+    n = pnode.copy()
+    n.left = self.build_ast(n.left)[0]
+    n.right = self.build_ast(n.right)[0]
+    return [n]
+
+  analyzeBinOpExpressionNode = analyzeBinOpNode
+  
+  def analyzeUnaryOpNode(self, pnode):
+    n = pnode.copy()
+    n.expression = self.build_ast(n.expression)[0]
+    return [n]
 
   def analyzeCommentNode(self, pnode):
     return []
 
   def analyzeCallFunctionNode(self, pnode):
+    # print "analyzeCallFunctionNode", pnode.expression.name
     fn = pnode.copy()
     # fixme: the problem here is that this means that some fallout
     # from python code generation is percolating into the semantic
@@ -186,18 +256,17 @@ class SemanticAnalyzer(object):
     if (isinstance(fn.expression, PlaceholderNode) and
         fn.expression.name in ('get_var', 'has_var')):
       # fixme: total cheat here
-      fn.expression = IdentifierNode('self.%s' % fn.expression.name)
-      local_vars = ParameterNode(
-        'local_vars',
-        CallFunctionNode(IdentifierNode('locals')))
-      fn.arg_list.append(local_vars)
+      fn.arg_list.append(t_local_vars())
+    fn.expression = self.build_ast(fn.expression)[0]
     return [fn]
 
-  def optimize_child_nodes(self, node_list):
+  # go over the parsed nodes and weed out the parts we don't need
+  # it's easier to do this before we morph the AST to look more like python
+  def optimize_parsed_nodes(self, node_list):
     optimized_nodes = []
     for n in node_list:
-      # collapse optional whitespace by stripping out the nodes
-      if (self.options.collapse_optional_whitespace and
+      # strip optional whitespace by removing the nodes
+      if (self.options.strip_optional_whitespace and
           isinstance(n, OptionalWhitespaceNode)):
         continue
       # collapse adjacent TextNodes so we are calling these buffer writes
@@ -209,6 +278,11 @@ class SemanticAnalyzer(object):
       else:
         optimized_nodes.append(n)
     #print "optimized_nodes", node_list, optimized_nodes
-    node_list[:] = optimized_nodes
+    return optimized_nodes
 
-      
+
+# template objects for certain common subcomponents
+def t_local_vars():
+  t = ParameterNode('local_vars',
+                    CallFunctionNode(IdentifierNode('locals')))
+  return copy.deepcopy(t)

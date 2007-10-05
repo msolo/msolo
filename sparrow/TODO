@@ -17,6 +17,7 @@ Functionality:
      #include directive - but check at runtime that it's a library?
      * does that check buy you anything?
  * make #library directive to disambiguate template includes
+ * allow #ifdef for compile time
  * import raw file include?
  * implement array slicing?
  * add native support for 'elif' clause
@@ -25,16 +26,14 @@ Functionality:
  * while loop (repeat?) what is the difference?
  * test keyword args to functions with literals and complex placeholders
  * add #encoding directive
- * emulate virtual odd/even var in loops
  * #set directive
  * add a build time/version attribute
  * xhtml-oriented front end
+   * emulate virtual odd/even var in loops (partially implemented Repeater)
 
 Optimization:
- * factor out placeholder lookups in loops
- * collapse placeholders and adjacent text nodes so we end up doing fewer
-   buffer.write operations and do simple string subsitution
-
+ * factor out common sub-expressions during resolve_udn
+ * only store local variables called more than once?
 Variant 1:
         write(u"""<td>""") 
         write("%s" % column)
@@ -49,7 +48,7 @@ Variant 2:
         write(u"""<td>%s</td>\n""" % column)
 
    * optimization of this loop is very version dependent
-   * Example
+   * Variant 2 is universally the slowest
  * collapse functions that comprise of a single text node to a return a unicode
    string constant
 
@@ -57,8 +56,21 @@ Cleanup:
  * analyzer is still a bit foul
    * want to make it possible to arbitrarily modify the tree without a copy
    * generic child_nodes array is probably no longer useful
+   * how many times to I really have to make a copy of a node?
+     * should I just modify inline after doing a tree-wise deep copy?
  * make the grammar file as simple as possible
  * why do i have 'code gen' in the semantic analysis phase? passing around
    variables etc for get_var/has_var seems ugly.
  * crunner is a bit foul - might be better to have separate front end for tests
    * borrow more code from sparrow-compile
+
+Bugs:
+ * optional whitespace is not getting located correctly - the break statement
+   seems to be confusing the parser
+#for $x in $test_object_list
+test line $x.id : $x.name
+  #if $x.id > 1
+    #break
+  #end if
+#end for
+

@@ -80,3 +80,8 @@ def get_available_placeholders(scope):
     return scope.keys()
   else:
     return dir(scope)
+
+def enable_psyco(template_class):
+  import psyco
+  psyco.bind(SparrowTemplate)
+  psyco.bind(template_class)

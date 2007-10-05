@@ -1,3 +1,21 @@
+0.5.5 - continued on the optimization. analysis and optimization are now two
+distinct operations. optimization occurs inline and modifies the tree structure
+in place. to effectively optimize, i need to be able to crawl up the tree to
+find out scope information. added the 'replace' function to simplify altering
+the AST during optimization - only partially implemented.
+
+0.5.4 - added more parse-to-abstract tree conversion. this means that little
+nuggets of code that bridge the template content and the runtime get tricky to
+express as a tree fragment.  the goal is making the AST as AST-like as possible
+before sending off the tree to the analyzer.  the increasingly annoying part is
+the amount of code required to 'visit' the tree properly. the next phase is to
+separate out the parse tree conversion and the performance analysis and 
+optimization phases. the other annoying thing is the sheer number of node
+copies made during this phase -- compile is a one-time operation, but it feels
+like it's getting ridiculous. this emits some partially optimzed code, and 
+although the tests pass, I wouldn't use it at the moment.
+
+
 0.5.3 - share more code between the crunner and sparrow compile. rework the
 code for handling dynamic template compile and loading. added a basic demo of
 an attribute language like TAL or Kid. mostly proves that the AST can support

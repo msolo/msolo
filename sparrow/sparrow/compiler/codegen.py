@@ -32,8 +32,9 @@ class CodeGenerator(object):
   indent_str = '  '
   indent_level = 0
   
-  def __init__(self, ast_root):
+  def __init__(self, ast_root, options=None):
     self.ast_root = ast_root
+    self.options = options
     self.output = StringIO.StringIO()
     
 
@@ -110,6 +111,10 @@ class CodeGenerator(object):
     # if we aren't extending a template, build out the main function
     if not node.extends_nodes and not node.library:
       class_code.extend(self.build_code(node.main_function))
+
+
+    if self.options and self.options.enable_psyco:
+      module_code.append_line('sparrow.runtime.template.enable_psyco(%(classname)s)' % vars())
 
     module_code.append_line(run_tmpl % vars(node))
 
@@ -216,9 +221,14 @@ class CodeGenerator(object):
   codegenASTArgListNode = codegenASTParameterListNode
     
   def codegenASTGetUDNNode(self, node):
+    #print "codegenASTGetUDNNode", id(node), "name", node.name, "expr", node.expression
     expression = self.generate_python(self.build_code(node.expression)[0])
     name = node.name
     return [CodeNode("resolve_udn(%(expression)s, '%(name)s')" % vars())]
+
+  def codegenASTReturnNode(self, node):
+    expression = self.generate_python(self.build_code(node.expression)[0])
+    return [CodeNode("return %(expression)s" % vars())]
 
   def codegenASTOptionalWhitespaceNode(self, node):
     #if self.ignore_optional_whitespace:
@@ -231,23 +241,29 @@ class CodeGenerator(object):
       self.build_code(node.slice_expression)[0])
     return [CodeNode("%(expression)s[%(slice_expression)s]" % vars())]
 
-  def codegenASTBinOpNode(self, node):
+  def codegenASTBinOpExpressionNode(self, node):
     left = self.generate_python(self.build_code(node.left)[0])
     right = self.generate_python(self.build_code(node.right)[0])
     operator = node.operator
     return [CodeNode('(%(left)s %(operator)s %(right)s)' % vars())]
 
-  def codegenASTAssignNode(self, node):
+  def codegenASTBinOpNode(self, node):
     left = self.generate_python(self.build_code(node.left)[0])
     right = self.generate_python(self.build_code(node.right)[0])
     operator = node.operator
     return [CodeNode('%(left)s %(operator)s %(right)s' % vars())]
+
+  codegenASTAssignNode = codegenASTBinOpNode
 
   def codegenASTUnaryOpNode(self, node):
     expression = self.generate_python(self.build_code(node.expression)[0])
     operator = node.operator
     return [CodeNode('(%(operator)s %(expression)s)' % vars())]
 
+  def codegenASTGetAttrNode(self, node):
+    expression = self.generate_python(self.build_code(node.expression)[0])
+    name = node.name
+    return [CodeNode("%(expression)s.%(name)s" % vars())]
 
   def codegenASTFunctionNode(self, node):
     name = node.name
@@ -287,36 +303,38 @@ if __name__ == '__main__':
 """
 
 
-ASTTextNode_tmpl = ['buffer.write(u"""%(value)s""")']
+#ASTTextNode_tmpl = ['buffer.write(u"""%(value)s""")']
 
-ASTOptionalWhitespaceNode_tmpl = ASTTextNode_tmpl
+# ASTOptionalWhitespaceNode_tmpl = ASTTextNode_tmpl
 
-ASTWhitespaceNode_tmpl = ASTTextNode_tmpl
+# ASTWhitespaceNode_tmpl = ASTTextNode_tmpl
 
-ASTNewlineNode_tmpl = ASTTextNode_tmpl
+# ASTNewlineNode_tmpl = ASTTextNode_tmpl
 
 ASTFunctionNode_tmpl = ['def %(name)s(%(parameter_list)s):']
 
-ASTFunctionInitNode_tmpl = ['buffer = self.new_buffer()']
+# ASTFunctionInitNode_tmpl = ['buffer = self.new_buffer()']
 
-ASTReturnNode_tmpl = ['return buffer.getvalue()']
+#ASTReturnNode_tmpl = ['return %(expression)s']
 
 ASTCallFunctionNode_tmpl = ['%(expression)s(%(arg_list)s)']
 
 ASTForNode_tmpl = ['for %(target_list)s in %(expression_list)s:']
 
-ASTPlaceholderNode_tmpl = [
-  'self.resolve_placeholder("%(name)s", local_vars=locals())']
+# ASTPlaceholderNode_tmpl = [
+# 'self.resolve_placeholder("%(name)s", local_vars=locals())']
 
-ASTPlaceholderSubstitutionNode_tmpl = [
-  'buffer.write("%%s" %% %(placeholder)s)']
+#ASTPlaceholderSubstitutionNode_tmpl = [
+#  'buffer.write("%%s" %% %(placeholder)s)']
 
 ASTTargetNode_tmpl = ['%(name)s']
 
 ASTIdentifierNode_tmpl = ['%(name)s']
+ASTAssignIdentifierNode_tmpl = ASTIdentifierNode_tmpl
 
 ASTLiteralNode_tmpl = ['%(value)r']
 
 ASTBreakNode_tmpl = ['break']
 
 ASTContinueNode_tmpl = ['continue']
+
