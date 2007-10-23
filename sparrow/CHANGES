@@ -1,3 +1,6 @@
+0.5.6 - added globals() resolution to resolve_placeholder. added list arg
+analysis.
+
 0.5.5 - continued on the optimization. analysis and optimization are now two
 distinct operations. optimization occurs inline and modifies the tree structure
 in place. to effectively optimize, i need to be able to crawl up the tree to

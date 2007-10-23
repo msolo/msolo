@@ -287,9 +287,11 @@ class CodeGenerator(object):
 
   def codegenDefault(self, node):
     v = globals()
-    return [CodeNode(line % vars(node))
-        for line in v['AST%s_tmpl' % node.__class__.__name__]]
-
+    try:
+      return [CodeNode(line % vars(node))
+              for line in v['AST%s_tmpl' % node.__class__.__name__]]
+    except KeyError, e:
+      raise CodegenError("no codegen for %s %s" % (type(node), vars(node)))
   def codegen(self, node):
     return self.codegenDefault(node)[0]
 

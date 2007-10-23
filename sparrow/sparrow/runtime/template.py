@@ -22,9 +22,21 @@ class SparrowTemplate(object):
   # FIXME: i'm sure this is a little pokey - might be able to speed this up
   # somehow. not sure if it's better to look before leaping or raise.
   # might also want to let users tune whether to prefer keys or attributes
-  def resolve_placeholder(self, name, local_vars, default=Unspecified):
+  def resolve_placeholder(self, name, local_vars, global_vars,
+                          default=Unspecified):
     try:
       return local_vars[name]
+    except TypeError:
+      raise PlaceholderError('unexpected type for local_vars: %s' %
+                             type(local_vars))
+    except KeyError:
+      pass
+
+    try:
+      return global_vars[name]
+    except TypeError:
+      raise PlaceholderError('unexpected type for global_vars: %s' %
+                             type(global_vars))
     except KeyError:
       pass
 
@@ -37,7 +49,9 @@ class SparrowTemplate(object):
       for scope in self.search_list:
         try:
           return scope[name]
-        except KeyError:
+#           raise PlaceholderError('unexpected type: %s %s' %
+#                                  (type(scope), vars(scope)))
+        except (TypeError, KeyError):
           pass
         
         try:
@@ -52,12 +66,17 @@ class SparrowTemplate(object):
                              [get_available_placeholders(scope)
                               for scope in self.search_list])
 
-  def get_var(self, name, default=Unspecified, local_vars=None):
+  # fixme: this function seems kind of like a mess, arg ordering etc
+  def get_var(self, name, default=Unspecified, local_vars=None,
+              global_vars=None):
     return self.resolve_placeholder(name, local_vars=local_vars,
+                                    global_vars=global_vars,
                                     default=default)
 
-  def has_var(self, name, local_vars):
+  def has_var(self, name, local_vars, global_vars):
     if name in local_vars:
+      return True
+    if name in global_vars:
       return True
 
     if hasattr(self, name):

@@ -94,9 +94,15 @@ class SemanticAnalyzer(object):
     return ast_node_list
 
   def default_analyze_node(self, pnode):
-    #print "default_analyze_node", type(pnode)
+    print "default_analyze_node", type(pnode)
     return [pnode.copy()]
-  
+
+  # some nodes just don't need analysis
+  def skip_analyze_node(self, pnode):
+    return [pnode.copy()]
+  analyzeIdentifierNode = skip_analyze_node
+  analyzeLiteralNode = skip_analyze_node
+
   def analyzeTemplateNode(self, pnode):
     self.template = pnode.copy(copy_children=False)
     self.template.classname = self.classname
@@ -136,6 +142,17 @@ class SemanticAnalyzer(object):
     for pn in self.optimize_parsed_nodes(pnode.else_):
       if_node.else_.extend(self.build_ast(pn))
     return [if_node]
+
+  def analyzeArgListNode(self, pnode):
+    list_node = ArgListNode()
+    for n in pnode:
+      list_node.extend(self.build_ast(n))
+    return [list_node]
+
+  def analyzeParameterNode(self, pnode):
+    param = pnode.copy()
+    param.default = self.build_ast(pnode.default)[0]
+    return [param]
 
   def analyzeSliceNode(self, pnode):
     snode = pnode.copy()
@@ -228,6 +245,7 @@ class SemanticAnalyzer(object):
                                      'resolve_placeholder'))
     f.arg_list.append(LiteralNode(pnode.name))
     f.arg_list.append(t_local_vars())
+    f.arg_list.append(t_global_vars())
     f.hint_map['resolve_placeholder'] = IdentifierNode(pnode.name)
     return self.build_ast(f)
 
@@ -257,7 +275,9 @@ class SemanticAnalyzer(object):
         fn.expression.name in ('get_var', 'has_var')):
       # fixme: total cheat here
       fn.arg_list.append(t_local_vars())
+      fn.arg_list.append(t_global_vars())
     fn.expression = self.build_ast(fn.expression)[0]
+    fn.arg_list = self.build_ast(fn.arg_list)[0]
     return [fn]
 
   # go over the parsed nodes and weed out the parts we don't need
@@ -285,4 +305,9 @@ class SemanticAnalyzer(object):
 def t_local_vars():
   t = ParameterNode('local_vars',
                     CallFunctionNode(IdentifierNode('locals')))
-  return copy.deepcopy(t)
+  return t
+
+def t_global_vars():
+  t = ParameterNode('global_vars',
+                    CallFunctionNode(IdentifierNode('globals')))
+  return t

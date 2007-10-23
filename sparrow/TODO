@@ -32,6 +32,9 @@ Functionality:
    * emulate virtual odd/even var in loops (partially implemented Repeater)
 
 Optimization:
+ * replace functions that only write a constant with one that just returns that
+   constant string - no intermediate buffer
+ * expose imports as globals vars that don't need to be resolved at runtime
  * factor out common sub-expressions during resolve_udn
  * only store local variables called more than once?
 Variant 1:

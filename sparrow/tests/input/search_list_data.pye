@@ -9,5 +9,6 @@
                          ],
     'test_dict': {'key1': 1},
     'test_whitespaced_dict': {'key 1': 1},
+    'test_str_function': str,
     'test_range': range,
 }
