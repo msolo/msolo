@@ -8,6 +8,7 @@ import sparrow.compiler.parser
 import sparrow.compiler.scanner
 import sparrow.compiler.analyzer
 import sparrow.compiler.optimizer
+import sparrow.compiler.xhtml2ast
 
 valid_identfier = re.compile('[a-z]\w*', re.IGNORECASE)
 
@@ -21,17 +22,21 @@ def filename2classname(filename):
 
 
 # @return abstract syntax tree rooted on a TemplateNode
-def parse(src_text):
+def parse(src_text, rule='goal'):
   parser = sparrow.compiler.parser.SparrowParser(
     sparrow.compiler.scanner.SparrowScanner(src_text))
-  return sparrow.compiler.parser.wrap_error_reporter(parser, 'goal')
+  return sparrow.compiler.parser.wrap_error_reporter(parser, rule)
 
 
-def parse_file(filename):
+def parse_file(filename, xhtml=False):
   f = open(filename, 'r')
   try:
     src_text = f.read().decode('utf8')
-    return parse(src_text)
+    if xhtml:
+      parser = sparrow.compiler.xhtml2ast.XHTML2AST()
+      return parser.parse(src_text)
+    else:
+      return parse(src_text)
   finally:
     f.close()
 
@@ -54,8 +59,9 @@ def compile_template(src_text, classname,
   return compile_ast(parse(src_text), classname, options)
 
 def compile_file(filename, write_file=False,
-                 options=sparrow.compiler.analyzer.default_options):
-  parse_root = parse_file(filename)
+                 options=sparrow.compiler.analyzer.default_options,
+                 xhtml=False):
+  parse_root = parse_file(filename, xhtml=xhtml)
   src_code = compile_ast(parse_root, filename2classname(filename), options)
   if write_file:
     write_src_file(src_code, filename)
@@ -76,12 +82,13 @@ def write_src_file(src_code, filename):
 # this won't recursively import templates, it's just a convenience in the case
 # where you need to create a fresh object directly from raw template file
 def load_template_file(filename, module_name=None,
-                       options=sparrow.compiler.analyzer.default_options):
+                       options=sparrow.compiler.analyzer.default_options,
+                       xhtml=False):
   class_name = filename2classname(filename)
   if not module_name:
     module_name = class_name
 
-  src_code = compile_file(filename, options=options)
+  src_code = compile_file(filename, options=options, xhtml=xhtml)
   module = load_module_from_src(src_code, filename, module_name)
   return getattr(module, class_name)
 

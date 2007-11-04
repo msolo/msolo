@@ -25,11 +25,26 @@ Functionality:
  * implement dictionary literals
  * while loop (repeat?) what is the difference?
  * test keyword args to functions with literals and complex placeholders
+   * keyword syntax is ambiguous between definition and calling - using $
+     should be more consistent. right now you must have it in the def, but you
+     can't have it when you do the calling.
  * add #encoding directive
  * #set directive
- * add a build time/version attribute
+ * add a build time/version attribute?
  * xhtml-oriented front end
    * emulate virtual odd/even var in loops (partially implemented Repeater)
+ * Attribute Language - (like TAL and Kid)
+   * guarantee well-formed
+   * test attribute operator precedence
+   * figure out nice way of inheritence
+   * add py:define
+     * use pythonesqe syntax
+     * syntax: py:define="x=$placeholder[0], y=$placeholder[1].my_attribute" 
+   * add py:attributes
+     * use exactly the same syntax as define?
+     * syntax: py:attributes="x=$placeholder[0], y=$placeholder[1].my_attribute" 
+     * use py-attr:<name>="expression" ?
+       * creates yet another namespace - but might be the most logical
 
 Optimization:
  * replace functions that only write a constant with one that just returns that
@@ -50,12 +65,16 @@ Variant 1.1:
 Variant 2:
         write(u"""<td>%s</td>\n""" % column)
 
-   * optimization of this loop is very version dependent
+   * optimization of this loop is dependend on the python version (2.4 vs 2.5)
    * Variant 2 is universally the slowest
  * collapse functions that comprise of a single text node to a return a unicode
    string constant
 
 Cleanup:
+ * revisit all uses of default_analyze_node - usually this is where
+   unimplimented functionality lurks
+ * front-end mode is a bit annoying - need to better detect xhtml vs text mode
+   instead of passing around
  * analyzer is still a bit foul
    * want to make it possible to arbitrarily modify the tree without a copy
    * generic child_nodes array is probably no longer useful

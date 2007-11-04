@@ -297,6 +297,8 @@ parser SparrowParser:
     ) *
     {{ return _primary }}
 
+  rule define_list:
+    argument_list END {{ return argument_list }}
 
   # TODO: need to factor out commonalities of pargs and kargs patterns
   # FIXME: seems like a hack - should these all be ParameterNodes and replace

@@ -94,7 +94,7 @@ class SemanticAnalyzer(object):
     return ast_node_list
 
   def default_analyze_node(self, pnode):
-    print "default_analyze_node", type(pnode)
+    #print "default_analyze_node", type(pnode)
     return [pnode.copy()]
 
   # some nodes just don't need analysis

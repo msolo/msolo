@@ -344,7 +344,7 @@ class SparrowParser(Parser):
 
     def placeholder(self):
         START_PLACEHOLDER = self._scan('START_PLACEHOLDER')
-        if self._peek('ID', 'SPACE', 'ASSIGN_OPERATOR', 'DOT', 'OPEN_PAREN', 'OPEN_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*in[ \\t]*'", 'CLOSE_PAREN', 'CLOSE_BRACKET', "'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', "'[ \\t]*:[ \\t]*'", 'CLOSE_BRACE') == 'ID':
+        if self._peek('ID', 'SPACE', 'ASSIGN_OPERATOR', 'DOT', 'OPEN_PAREN', 'OPEN_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*in[ \\t]*'", 'CLOSE_PAREN', 'CLOSE_BRACKET', "'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', "'[ \\t]*:[ \\t]*'", 'CLOSE_BRACE', 'END') == 'ID':
             ID = self._scan('ID')
             return PlaceholderNode(ID)
         return TextNode(START_PLACEHOLDER)
@@ -425,7 +425,7 @@ class SparrowParser(Parser):
         else:# == 'NUM'
             NUM = self._scan('NUM')
             int_part = NUM
-            if self._peek('"\\."', 'CLOSE_DIRECTIVE', 'DOT', 'OPEN_PAREN', 'OPEN_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*\\*[ \\t]*'", 'CLOSE_PAREN', "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_BRACKET', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_BRACE') == '"\\."':
+            if self._peek('"\\."', 'CLOSE_DIRECTIVE', 'DOT', 'OPEN_PAREN', 'OPEN_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*\\*[ \\t]*'", 'CLOSE_PAREN', "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_BRACKET', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_BRACE', 'END') == '"\\."':
                 self._scan('"\\."')
                 NUM = self._scan('NUM')
                 return LiteralNode(float('%s.%s' % (int_part, NUM)))
@@ -489,7 +489,7 @@ class SparrowParser(Parser):
                     _dict_literal.append((_key, expression))
             CLOSE_BRACE = self._scan('CLOSE_BRACE')
             _primary = _dict_literal
-        while self._peek('DOT', 'OPEN_PAREN', 'OPEN_BRACKET', "'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') in ['DOT', 'OPEN_PAREN', 'OPEN_BRACKET']:
+        while self._peek('DOT', 'OPEN_PAREN', 'OPEN_BRACKET', "'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') in ['DOT', 'OPEN_PAREN', 'OPEN_BRACKET']:
             _token_ = self._peek('DOT', 'OPEN_PAREN', 'OPEN_BRACKET')
             if _token_ == 'DOT':
                 DOT = self._scan('DOT')
@@ -510,16 +510,21 @@ class SparrowParser(Parser):
                 _primary = SliceNode(_primary, expression)
         return _primary
 
+    def define_list(self):
+        argument_list = self.argument_list()
+        END = self._scan('END')
+        return argument_list
+
     def argument_list(self):
         _pargs, _kargs = [], []
         expression = self.expression()
         _arg = expression
-        while self._peek('"[ \\t]*,[ \\t]*"', 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN') == '"[ \\t]*,[ \\t]*"':
+        while self._peek('"[ \\t]*,[ \\t]*"', 'ASSIGN_OPERATOR', 'ID', 'END', 'CLOSE_PAREN') == '"[ \\t]*,[ \\t]*"':
             self._scan('"[ \\t]*,[ \\t]*"')
             _pargs.append(_arg)
             expression = self.expression()
             _arg = expression
-        if self._peek('ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN') == 'ASSIGN_OPERATOR':
+        if self._peek('ASSIGN_OPERATOR', 'ID', 'END', 'CLOSE_PAREN') == 'ASSIGN_OPERATOR':
             ASSIGN_OPERATOR = self._scan('ASSIGN_OPERATOR')
             if not isinstance(_arg, IdentifierNode): raise SyntaxError(self._scanner.pos, "keyword arg can't be complex expression")
             _karg = ParameterNode(_arg.name)
@@ -527,7 +532,7 @@ class SparrowParser(Parser):
             expression = self.expression()
             _karg.default = expression
             _kargs.append(_karg)
-            while self._peek('ID', 'CLOSE_PAREN') == 'ID':
+            while self._peek('ID', 'END', 'CLOSE_PAREN') == 'ID':
                 identifier = self.identifier()
                 _karg = ParameterNode(identifier.name)
                 ASSIGN_OPERATOR = self._scan('ASSIGN_OPERATOR')
@@ -557,7 +562,7 @@ class SparrowParser(Parser):
     def or_test(self):
         and_test = self.and_test()
         _test = and_test
-        while self._peek("'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*or[ \\t]*'":
+        while self._peek("'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*or[ \\t]*'":
             self._scan("'[ \\t]*or[ \\t]*'")
             and_test = self.and_test()
             _test = BinOpExpressionNode('or', _test, and_test)
@@ -566,7 +571,7 @@ class SparrowParser(Parser):
     def and_test(self):
         not_test = self.not_test()
         _test = not_test
-        while self._peek("'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*and[ \\t]*'":
+        while self._peek("'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*and[ \\t]*'":
             self._scan("'[ \\t]*and[ \\t]*'")
             not_test = self.not_test()
             _test = BinOpExpressionNode('and', _test, not_test)
@@ -595,15 +600,15 @@ class SparrowParser(Parser):
     def m_expr(self):
         u_expr = self.u_expr()
         _expr = u_expr
-        while self._peek("'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\*[ \\t]*'":
+        while self._peek("'[ \\t]*\\*[ \\t]*'", "'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*\\*[ \\t]*'":
             self._scan("'[ \\t]*\\*[ \\t]*'")
             u_expr = self.u_expr()
             _expr = BinOpExpressionNode('*', _expr, u_expr)
-        while self._peek("'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\/[ \\t]*'":
+        while self._peek("'[ \\t]*\\/[ \\t]*'", "'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*\\/[ \\t]*'":
             self._scan("'[ \\t]*\\/[ \\t]*'")
             u_expr = self.u_expr()
             _expr = BinOpExpressionNode('\\', _expr, u_expr)
-        while self._peek("'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\%[ \\t]*'":
+        while self._peek("'[ \\t]*\\%[ \\t]*'", "'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*\\%[ \\t]*'":
             self._scan("'[ \\t]*\\%[ \\t]*'")
             u_expr = self.u_expr()
             _expr = BinOpExpressionNode('%', _expr, u_expr)
@@ -612,11 +617,11 @@ class SparrowParser(Parser):
     def a_expr(self):
         m_expr = self.m_expr()
         _expr = m_expr
-        while self._peek("'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\+[ \\t]*'":
+        while self._peek("'[ \\t]*\\+[ \\t]*'", "'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*\\+[ \\t]*'":
             self._scan("'[ \\t]*\\+[ \\t]*'")
             m_expr = self.m_expr()
             _expr = BinOpExpressionNode('+', _expr, m_expr)
-        while self._peek("'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == "'[ \\t]*\\-[ \\t]*'":
+        while self._peek("'[ \\t]*\\-[ \\t]*'", 'COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == "'[ \\t]*\\-[ \\t]*'":
             self._scan("'[ \\t]*\\-[ \\t]*'")
             m_expr = self.m_expr()
             _expr = BinOpExpressionNode('-', _expr, m_expr)
@@ -625,7 +630,7 @@ class SparrowParser(Parser):
     def comparison(self):
         a_expr = self.a_expr()
         _left_side = a_expr
-        while self._peek('COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE') == 'COMP_OPERATOR':
+        while self._peek('COMP_OPERATOR', "'[ \\t]*and[ \\t]*'", "'[ \\t]*or[ \\t]*'", 'CLOSE_DIRECTIVE', 'CLOSE_BRACKET', '"[ \\t]*,[ \\t]*"', "'[ \\t]*:[ \\t]*'", 'ASSIGN_OPERATOR', 'ID', 'CLOSE_PAREN', 'CLOSE_BRACE', 'END') == 'COMP_OPERATOR':
             COMP_OPERATOR = self._scan('COMP_OPERATOR')
             a_expr = self.a_expr()
             _left_side = BinOpExpressionNode(COMP_OPERATOR.strip(), _left_side, a_expr)

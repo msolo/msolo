@@ -42,7 +42,7 @@ def process_file(filename, options):
     print_output("compile", filename)
     if not options.quiet:
       print "parse_root walk"
-      parse_root = sparrow.compiler.util.parse_file(filename)
+      parse_root = sparrow.compiler.util.parse_file(filename, options.xhtml)
       #print_tree_walk(parse_root)
       #print_tree(parse_root)
     
@@ -82,7 +82,7 @@ def process_file(filename, options):
     try:
       module_name='tests.%s' % classname
       class_object = sparrow.compiler.util.load_template_file(
-        filename, module_name, options=opt)
+        filename, module_name, options=opt, xhtml=options.xhtml)
       template = class_object(search_list=search_list)
       current_output = template.main().encode('utf8')
     except Exception, e:
@@ -131,6 +131,7 @@ if __name__ == '__main__':
   op = OptionParser()
   op.add_option('-t', '--test', action='store_true', default=False)
   op.add_option('--test-input')
+  op.add_option('--xhtml', action='store_true')
   op.add_option('--test-output', default='output',
           help="directory for output")
   op.add_option('--accept-test-result', action='store_true', default=False,

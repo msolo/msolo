@@ -1,3 +1,8 @@
+0.5.7 - formalizing the xhtml parsing extensions. added very basic tests for
+the current functionality. starting to work on precendence. altered parser to
+allow a new production for py:define - not sure if i like it. there is a bug
+in -O2 mode - I've disabled testing until that becomes important.
+
 0.5.6 - added globals() resolution to resolve_placeholder. added list arg
 analysis.
 

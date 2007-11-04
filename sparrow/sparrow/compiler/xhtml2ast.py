@@ -2,27 +2,50 @@ import xml.dom.minidom
 
 from sparrow.compiler.ast import *
 
+import sparrow.compiler.util
+
 class XHTML2AST(object):
   
   def build_template(self, filename):
     f = open(filename)
     data = f.read().decode('utf8')
-    dom = xml.dom.minidom.parseString(data)
+    f.close()
+    return self.parse(data)
 
+  def parse(self, src_text):
+    dom = xml.dom.minidom.parseString(src_text)
     template = TemplateNode()
-    template.extend(self.build_ast(dom.documentElement))
+    template.extend(self.build_ast(dom))
     return template
   
   def build_ast(self, dom_node):
-    print "build_ast", dom_node.nodeName
+    #print "build_ast", dom_node.nodeName
     node_list = []
     if dom_node.attributes:
-      for attr_name in dom_node.attributes.keys():
-        if attr_name.startswith('py:'):
-          op = 'handle_%s' % attr_name.split(':')[-1]
-          node_list.extend(getattr(self, op)(dom_node, attr_name))
-          break
-      else:
+      # fixme: do I need keys() here?
+      # the key types have a precedence that needs to be preserved
+      op_precedence = [
+        'define',
+        'condition',
+        'repeat',
+        'content',
+        'content-html',
+        'replace',
+        'replace-html',
+        'attributes',
+        'omit-tag',
+        ]
+
+      attr_name_list = dom_node.attributes.keys()
+      processed_attr_op = False
+      for op in op_precedence:
+        op_attr_name = 'py:%s' % op
+        if op_attr_name in attr_name_list:
+          op_handler = 'handle_%s' % op
+          node_list.extend(getattr(self, op_handler)(dom_node, op_attr_name))
+          processed_attr_op = True
+
+      if not processed_attr_op:
         node_list.extend(self.handle_default(dom_node))
     else:
       node_list.extend(self.handle_default(dom_node))
@@ -44,8 +67,16 @@ class XHTML2AST(object):
     elif dom_node.nodeType == xml.dom.minidom.Node.COMMENT_NODE:
       # node_list.append(TextNode(dom_node.nodeValue))
       pass
+    elif dom_node.nodeType == xml.dom.minidom.Node.DOCUMENT_NODE:
+      for child in dom_node.childNodes:
+        node_list.extend(self.build_ast(child))
+    elif dom_node.nodeType == xml.dom.minidom.Node.PROCESSING_INSTRUCTION_NODE:
+      if dom_node.nodeName == 'py-doctype':
+        node_list.append(TextNode(dom_node.nodeValue))
+      else:
+        raise Exception("unexepected processing instruction: %s" % dom_node)
     else:
-      raise Exception("unexepected node type")
+      raise Exception("unexepected node type: %s" % dom_node.nodeType)
     return node_list
 
   def make_tag_node(self, dom_node, close=False):
@@ -71,6 +102,18 @@ class XHTML2AST(object):
           
     return node_list
 
+  def handle_define(self, dom_node, attr_name):
+    node_list = []
+    node_name = dom_node.nodeName
+    #print "handle_define", ast
+    # fixme: this is a nasty temp hack, it will generate the correct code
+    # for 1 define, but multiple expressions won't work
+    ast = sparrow.compiler.util.parse(dom_node.getAttribute(attr_name),
+                                      'argument_list')
+    node_list.extend(ast)
+    node_list.extend(self.make_tag_node(dom_node))
+    return node_list
+  
   
   def handle_content(self, dom_node, attr_name):
     node_list = []
@@ -114,6 +157,7 @@ class XHTML2AST(object):
       if_node.extend(self.build_ast(n))
     if_node.extend(self.make_tag_node(dom_node, close=True))
     return node_list
+
 
 
   def build_udn_path_ast(self, path):
