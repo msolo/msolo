@@ -37,6 +37,11 @@ Functionality:
    * guarantee well-formed
    * test attribute operator precedence
    * figure out nice way of inheritence
+     * most TAL templates only use 1 level of inheritence
+       * need to remember that most "subtemplates" are really complete,
+         well formed xhtml documents, so it's hard to define function fragments
+     * use processing instructions to create inheritance?
+     * use py:def nodes to create "functions"?
    * add py:define
      * use pythonesqe syntax
      * syntax: py:define="x=$placeholder[0], y=$placeholder[1].my_attribute" 
@@ -87,6 +92,11 @@ Cleanup:
    * borrow more code from sparrow-compile
 
 Bugs:
+ * when you do a py:repeat in a node like:
+     <meta py:repeat="x $items" pyattr:name="$x" />
+   you end up with no whitespace after the nodes, i'm not sure if this is
+   really necessary, but it's certainly a 'quirk'
+   
  * optional whitespace is not getting located correctly - the break statement
    seems to be confusing the parser
 #for $x in $test_object_list

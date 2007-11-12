@@ -297,8 +297,12 @@ parser SparrowParser:
     ) *
     {{ return _primary }}
 
+  # extra rules for parsing the attribute language
   rule define_list:
     argument_list END {{ return argument_list }}
+
+  rule rhs_expression:
+    expression END {{ return expression }}
 
   # TODO: need to factor out commonalities of pargs and kargs patterns
   # FIXME: seems like a hack - should these all be ParameterNodes and replace

@@ -11,4 +11,5 @@
     'test_whitespaced_dict': {'key 1': 1},
     'test_str_function': str,
     'test_range': range,
+    'content_type': 'text/html',
 }

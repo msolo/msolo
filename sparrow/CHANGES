@@ -1,3 +1,9 @@
+0.5.8 - expressions for repeat/define/content/replace are now properly parsed
+rather than hacked. added support for emulating TAL behavior when a repeat
+node has no content/replacement/children. added py-define - not sure i like
+the syntax - the dollar sign is not required for the assignent variable, but
+i'm not sure that's really consistent.
+
 0.5.7 - formalizing the xhtml parsing extensions. added very basic tests for
 the current functionality. starting to work on precendence. altered parser to
 allow a new production for py:define - not sure if i like it. there is a bug
