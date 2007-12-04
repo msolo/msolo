@@ -1,9 +1,19 @@
+import traceback
 import xml.dom.minidom
 
 from sparrow.compiler.ast import *
 
 import sparrow.compiler.util
 
+enable_debug = False
+def debug(func_name, dom_node):
+  if not enable_debug:
+    return
+  if dom_node.attributes:
+    print func_name, dom_node.nodeName, dom_node.attributes.keys()
+  else:
+    print func_name, dom_node.nodeName
+  
 class XHTML2AST(object):
   namespace = 'py'
   attr_op_namespace = 'pyattr'
@@ -21,7 +31,8 @@ class XHTML2AST(object):
     return template
   
   def build_ast(self, dom_node):
-    #print "build_ast", dom_node.nodeName
+    debug('build_ast', dom_node)
+
     node_list = []
     
     if dom_node.attributes:
@@ -30,7 +41,11 @@ class XHTML2AST(object):
       # since this is also how we scan the tree, on-error is included
       # fixme: content/replace are mutually exclusive, that should generate an
       # error
+      # the thing is, the way we process things is a little complicated, so
+      # the order is actually different - we might handle something like
+      # omit-tag early on, but really only apply it's implications later on
       op_precedence = [
+        'omit-tag',
         'define',
         'condition',
         'repeat',
@@ -39,7 +54,6 @@ class XHTML2AST(object):
         'replace',
         'replace-html',
         'attributes',
-        'omit-tag',
         'on-error',
         ]
 
@@ -53,8 +67,9 @@ class XHTML2AST(object):
       processed_any_op = False
       for op in op_precedence:
         op_attr_name = '%s:%s' % (self.namespace, op)
-        if op_attr_name in attr_name_list:
+        if dom_node.hasAttribute(op_attr_name): # in attr_name_list:
           op_handler = 'handle_%s' % op
+          op_handler = op_handler.replace('-', '_')
           # print "op_handler:", op_handler, dom_node.nodeName, dom_node.attributes.keys(), processed_any_op
 
           node_list.extend(getattr(self, op_handler)(dom_node, op_attr_name))
@@ -93,7 +108,7 @@ class XHTML2AST(object):
   # attr_ast - allow injecting some ast nodes
   # fixme: feels like it could have a cleaner API
   def handle_default(self, dom_node, attr_ast=None):
-    # print "handle_default", dom_node.nodeName, attr_ast
+    debug('handle_default', dom_node)
     node_list = []
     if dom_node.nodeType == xml.dom.minidom.Node.ELEMENT_NODE:
       node_list.extend(self.make_tag_node(dom_node, attr_ast=attr_ast))
@@ -118,18 +133,18 @@ class XHTML2AST(object):
     return node_list
 
   def make_tag_node(self, dom_node, close=False, attr_ast=None):
-    # print "make_tag_node", dom_node.nodeName, attr_ast
+    debug("make_tag_node", dom_node)
     node_list = []
     node_name = dom_node.nodeName
     if close:
-      if dom_node.childNodes:
+      if self.has_child_stuff(dom_node):
         node_list.append(TextNode(u'</%(node_name)s>' % vars()))
     else:
       attr_text = ' '.join(['%s="%s"' % (key, value)
                             for key, value in dom_node.attributes.items()
                             if not key.startswith('py:')])
       # fixme: this is starting to look fugly - hard to maintain and error prone
-      if dom_node.childNodes:
+      if self.has_child_stuff(dom_node):
         if attr_text:
           if attr_ast:
             node_list.append(TextNode(u'<%(node_name)s %(attr_text)s' % vars()))
@@ -160,7 +175,17 @@ class XHTML2AST(object):
             node_list.append(TextNode(u' />'))
           else:
             node_list.append(TextNode(u'<%(node_name)s />' % vars()))
-          
+
+    omit_tag = getattr(dom_node, 'omit_tag', False)
+    omit_tag_ast = getattr(dom_node, 'omit_tag_ast', None)
+    if omit_tag:
+      if omit_tag_ast:
+        if_node = IfNode(omit_tag_ast)
+        if_node.extend(node_list)
+        return [if_node]
+      else:
+        return []
+      
     return node_list
 
   def make_attr_node(self, attr):
@@ -188,28 +213,59 @@ class XHTML2AST(object):
   
   
   def handle_content(self, dom_node, attr_name):
-    node_list = []
-    node_name = dom_node.nodeName
-    node_list.extend(self.make_tag_node(dom_node))
+    debug("handle_content", dom_node)
+    #traceback.print_stack()
     expr_ast = sparrow.compiler.util.parse(
       dom_node.getAttribute(attr_name), 'rhs_expression')
-
-#    node_list.append(PlaceholderSubstitutionNode(
-#      self.build_udn_path_ast(dom_node.getAttribute(attr_name))))
+    dom_node.removeAttribute(attr_name)
+    setattr(dom_node, 'has_child_stuff', True)
+    node_list = []
+    debug("handle_content start", dom_node)
+    node_list.extend(self.make_tag_node(dom_node))
     node_list.append(PlaceholderSubstitutionNode(expr_ast))
+    debug("handle_content end", dom_node)
     node_list.extend(self.make_tag_node(dom_node, close=True))
+    debug("handle_content return", dom_node)    
+    return node_list
+
+  def handle_omit_tag(self, dom_node, attr_name):
+    debug("handle_omit_tag", dom_node)
+    node_list = []
+    node_name = dom_node.nodeName
+    raw_expression = dom_node.getAttribute(attr_name)
+    if raw_expression:
+      ast = sparrow.compiler.util.parse(raw_expression, 'argument_list')
+    else:
+      ast = None
+    
+    dom_node.removeAttribute(attr_name)
+    setattr(dom_node, 'omit_tag', True)
+    setattr(dom_node, 'omit_tag_ast', ast)
     return node_list
 
   
   def handle_replace(self, dom_node, attr_name):
     expr_ast = sparrow.compiler.util.parse(
       dom_node.getAttribute(attr_name), 'rhs_expression')
-#    return [PlaceholderSubstitutionNode(
-#      self.build_udn_path_ast(dom_node.getAttribute(attr_name)))]
+    dom_node.removeAttribute(attr_name)
     return [PlaceholderSubstitutionNode(expr_ast)]
 
 
+  def has_child_stuff(self, dom_node):
+    if getattr(dom_node, 'has_child_stuff', False):
+      return True
+    has_child_stuff = False
+    for attr_name in ('py:content', 'py:replace',):
+      if dom_node.hasAttribute(attr_name):
+        has_child_stuff = True
+        break
+    else:
+      has_child_stuff = bool(dom_node.childNodes)
+    setattr(dom_node, 'has_child_stuff', has_child_stuff)
+    return has_child_stuff
+  
   def handle_repeat(self, dom_node, attr_name):
+    debug("handle_repeat", dom_node)
     expr_pieces = dom_node.getAttribute(attr_name).split()
     dom_node.removeAttribute(attr_name)
     target = expr_pieces[0]
@@ -222,22 +278,35 @@ class XHTML2AST(object):
                       IdentifierNode(target)]),
       ExpressionListNode([CallFunctionNode(IdentifierNode('enumerate'),
                                            ArgListNode([expr_ast]))]))
-    has_child_stuff = False
-    for attr_name in ('py:content', 'py:replace',):
-      if dom_node.hasAttribute(attr_name):
-        has_child_stuff = True
-        break
-    else:
-      has_child_stuff = bool(dom_node.childNodes)
 
-    if has_child_stuff:
-      node_list.append(self.make_tag_node(dom_node))
-      for n in dom_node.childNodes:
-        fn.extend(self.build_ast(n))
-    else:
+    if self.has_child_stuff(dom_node):
+      debug("has_child_stuff:", dom_node)
       fn.extend(self.build_ast(dom_node))
+      #fn.append(self.make_tag_node(dom_node))
+      #for n in dom_node.childNodes:
+      #  fn.extend(self.build_ast(n))
+    else:
+      # print "no children"
+      fn.extend(self.build_ast(dom_node))
+
+    if (dom_node.previousSibling and
+        dom_node.previousSibling.nodeType == xml.dom.minidom.Node.TEXT_NODE and
+        not dom_node.previousSibling.nodeValue.strip()):
+      # inject the previous whitespace sibling to keep the output looking ok
+      # fixme: a conditional is probably required here - you only want to
+      # execute this if it's not the last execution of the loop
+      fn.prepend(self.build_ast(dom_node.previousSibling))
+
+      # now remove the previous sibling
+      #print "node", dom_node
+      #print "parent", dom_node.parentNode
+      #print "previous", dom_node.previousSibling, id(dom_node.previousSibling)
+      #print "next", dom_node.nextSibling, id(dom_node.nextSibling)
+      #dom_node.parentNode.removeChild(dom_node.previousSibling)
+      node_list.append(EatPrevious())
+        
     node_list.append(fn)
-    node_list.extend(self.make_tag_node(dom_node, close=True))
+    #fn.extend(self.make_tag_node(dom_node, close=True))
     return node_list
 
 

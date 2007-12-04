@@ -12,12 +12,14 @@
         <td>1</td>
         <td>1</td>
         <td>o1</td>
-      
+      </tr>
+      <tr>
         <td>1</td>
         <td>2</td>
         <td>2</td>
         <td>o2</td>
-      
+      </tr>
+      <tr>
         <td>2</td>
         <td>3</td>
         <td>3</td>

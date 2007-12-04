@@ -1,5 +1,9 @@
 import copy
 
+# this is a horrible hack to let the tree modify itself during conversion
+class EatPrevious(object):
+  pass
+
 class ASTNode(object):
   def __init__(self, name=''):
     self.name = name
@@ -34,7 +38,17 @@ class ASTNode(object):
     if isinstance(node, list):
       self.extend(node)
     else:
-      self.child_nodes.append(node)
+      if type(node) is EatPrevious:
+        del self.child_nodes[-1]
+      else:
+        self.child_nodes.append(node)
+
+  def prepend(self, node):
+    if isinstance(node, list):
+      for n in reversed(node):
+        self.child_nodes.insert(0, n)
+    else:
+      self.child_nodes.insert(0, node)
 
   # some classes override append() so just call down to that for now
   def extend(self, node_list):

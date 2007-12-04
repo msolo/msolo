@@ -23,6 +23,7 @@ Functionality:
  * add native support for 'elif' clause
    * is this a codegen or parsing problem?
  * implement dictionary literals
+ * implement support for True/False literals
  * while loop (repeat?) what is the difference?
  * test keyword args to functions with literals and complex placeholders
    * keyword syntax is ambiguous between definition and calling - using $
@@ -54,6 +55,7 @@ Functionality:
 Optimization:
  * replace functions that only write a constant with one that just returns that
    constant string - no intermediate buffer
+   * in some cases, might be able to skip the whole function call too
  * expose imports as globals vars that don't need to be resolved at runtime
  * factor out common sub-expressions during resolve_udn
  * only store local variables called more than once?
@@ -90,12 +92,13 @@ Cleanup:
    variables etc for get_var/has_var seems ugly.
  * crunner is a bit foul - might be better to have separate front end for tests
    * borrow more code from sparrow-compile
+ * EatPrevious node is a vile thing - make the DOM scanner look ahread 1 or 2
+   nodes and determine what to do with optional whitespace nodes before
+   processing them
 
 Bugs:
- * when you do a py:repeat in a node like:
-     <meta py:repeat="x $items" pyattr:name="$x" />
-   you end up with no whitespace after the nodes, i'm not sure if this is
-   really necessary, but it's certainly a 'quirk'
+ * py:conditional directives that are skipped still output a good amount of
+   extra whitespace. could this be tightened up?
    
  * optional whitespace is not getting located correctly - the break statement
    seems to be confusing the parser
