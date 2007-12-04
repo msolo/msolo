@@ -91,7 +91,7 @@ Cleanup:
  * why do i have 'code gen' in the semantic analysis phase? passing around
    variables etc for get_var/has_var seems ugly.
  * crunner is a bit foul - might be better to have separate front end for tests
-   * borrow more code from sparrow-compile
+   * borrow more code from spitfire-compile
  * EatPrevious node is a vile thing - make the DOM scanner look ahread 1 or 2
    nodes and determine what to do with optional whitespace nodes before
    processing them

@@ -47,9 +47,9 @@ except ImportError:
     MakoTemplate = None
 
 try:
-    import sparrow as SparrowTemplate
+    import spitfire as SpitfireTemplate
 except ImportError:
-    SparrowTemplate = None
+    SpitfireTemplate = None
 
 try:
     from Cheetah import Template as CheetahTemplate
@@ -110,10 +110,10 @@ if MakoTemplate:
         data = mako_tmpl.render(table=table)
         #print "mako", len(data)
 
-if SparrowTemplate:
-    import sparrow.compiler.analyzer
-    import sparrow.compiler.util
-    sparrow_src = """<table xmlns:py="http://sparrow/">
+if SpitfireTemplate:
+    import spitfire.compiler.analyzer
+    import spitfire.compiler.util
+    spitfire_src = """<table xmlns:py="http://spitfire/">
 #for $row in $table
 <tr>
 #for $column in $row.values()
@@ -124,40 +124,40 @@ if SparrowTemplate:
 </table>
 """
 
-    sparrow_tmpl = sparrow.compiler.util.load_template(
-        sparrow_src, 'sparrow_tmpl')
+    spitfire_tmpl = spitfire.compiler.util.load_template(
+        spitfire_src, 'spitfire_tmpl')
 
-    sparrow_tmpl_o1 = sparrow.compiler.util.load_template(
-        sparrow_src, 'sparrow_tmpl_o1', sparrow.compiler.analyzer.o1_options)
+    spitfire_tmpl_o1 = spitfire.compiler.util.load_template(
+        spitfire_src, 'spitfire_tmpl_o1', spitfire.compiler.analyzer.o1_options)
 
-    sparrow_tmpl_o2 = sparrow.compiler.util.load_template(
-        sparrow_src, 'sparrow_tmpl_o2', sparrow.compiler.analyzer.o2_options)
+    spitfire_tmpl_o2 = spitfire.compiler.util.load_template(
+        spitfire_src, 'spitfire_tmpl_o2', spitfire.compiler.analyzer.o2_options)
 
-    sparrow_tmpl_o3 = sparrow.compiler.util.load_template(
-        sparrow_src, 'sparrow_tmpl_o3', sparrow.compiler.analyzer.o3_options)
+    spitfire_tmpl_o3 = spitfire.compiler.util.load_template(
+        spitfire_src, 'spitfire_tmpl_o3', spitfire.compiler.analyzer.o3_options)
     # run once to get psyco warmed up
-    sparrow_tmpl_o3(search_list=[{'table':table}]).main()
+    spitfire_tmpl_o3(search_list=[{'table':table}]).main()
 
 
-    def test_sparrow():
-        """Sparrow template"""
-        data = sparrow_tmpl(search_list=[{'table':table}]).main()
-        #print "sparrow", len(data)
+    def test_spitfire():
+        """Spitfire template"""
+        data = spitfire_tmpl(search_list=[{'table':table}]).main()
+        #print "spitfire", len(data)
 
-    def test_sparrow_o1():
-        """Sparrow template -O1"""
-        data = sparrow_tmpl_o1(search_list=[{'table':table}]).main()
-        #print "sparrow -O1", len(data)
+    def test_spitfire_o1():
+        """Spitfire template -O1"""
+        data = spitfire_tmpl_o1(search_list=[{'table':table}]).main()
+        #print "spitfire -O1", len(data)
 
-    def test_sparrow_o2():
-        """Sparrow template -O2"""
-        data = sparrow_tmpl_o2(search_list=[{'table':table}]).main()
-        #print "sparrow -O2", len(data)
+    def test_spitfire_o2():
+        """Spitfire template -O2"""
+        data = spitfire_tmpl_o2(search_list=[{'table':table}]).main()
+        #print "spitfire -O2", len(data)
 
-    def test_sparrow_o3():
-        """Sparrow template -O3"""
-        data = sparrow_tmpl_o3(search_list=[{'table':table}]).main()
-        #print "sparrow -O3", len(data)
+    def test_spitfire_o3():
+        """Spitfire template -O3"""
+        data = spitfire_tmpl_o3(search_list=[{'table':table}]).main()
+        #print "spitfire -O3", len(data)
 
 if CheetahTemplate:
     cheetah_src = """<table>
@@ -290,8 +290,8 @@ def run(which=None, number=10):
              'test_genshi_builder', 'test_mako', 'test_kid', 'test_kid_et',
              'test_et', 'test_cet', 'test_clearsilver', 'test_django',
              'test_cheetah',
-             'test_sparrow', 'test_sparrow_o1',
-             'test_sparrow_o2', 'test_sparrow_o3',
+             'test_spitfire', 'test_spitfire_o1',
+             'test_spitfire_o2', 'test_spitfire_o3',
              ]
 
     if which:

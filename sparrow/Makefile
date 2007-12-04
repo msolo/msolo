@@ -7,12 +7,12 @@ ifndef YAPPS
 endif
 
 CRUNNER = scripts/crunner.py
-COMPILER = scripts/sparrow-compile
+COMPILER = scripts/spitfire-compile
 
-sparrow/compiler/parser.py: sparrow/compiler/parser.g
-	$(YAPPS) sparrow/compiler/parser.g
+spitfire/compiler/parser.py: spitfire/compiler/parser.g
+	$(YAPPS) spitfire/compiler/parser.g
 
-parser: sparrow/compiler/parser.py
+parser: spitfire/compiler/parser.py
 
 all: parser
 
@@ -47,7 +47,7 @@ tests: no_whitespace_tests whitespace_tests
 .PHONY : clean
 clean:
 	@find . -name '*.pyc' -exec rm {} \;
-	@rm -f sparrow/compiler/parser.py
+	@rm -f spitfire/compiler/parser.py
 	@rm -rf build
 
 .PHONY : clean_tests

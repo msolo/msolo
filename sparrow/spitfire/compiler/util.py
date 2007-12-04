@@ -3,12 +3,12 @@ import os.path
 import re
 import sys
 
-import sparrow.compiler.codegen
-import sparrow.compiler.parser
-import sparrow.compiler.scanner
-import sparrow.compiler.analyzer
-import sparrow.compiler.optimizer
-import sparrow.compiler.xhtml2ast
+import spitfire.compiler.codegen
+import spitfire.compiler.parser
+import spitfire.compiler.scanner
+import spitfire.compiler.analyzer
+import spitfire.compiler.optimizer
+import spitfire.compiler.xhtml2ast
 
 valid_identfier = re.compile('[a-z]\w*', re.IGNORECASE)
 
@@ -23,9 +23,9 @@ def filename2classname(filename):
 
 # @return abstract syntax tree rooted on a TemplateNode
 def parse(src_text, rule='goal'):
-  parser = sparrow.compiler.parser.SparrowParser(
-    sparrow.compiler.scanner.SparrowScanner(src_text))
-  return sparrow.compiler.parser.wrap_error_reporter(parser, rule)
+  parser = spitfire.compiler.parser.SpitfireParser(
+    spitfire.compiler.scanner.SpitfireScanner(src_text))
+  return spitfire.compiler.parser.wrap_error_reporter(parser, rule)
 
 
 def parse_file(filename, xhtml=False):
@@ -33,7 +33,7 @@ def parse_file(filename, xhtml=False):
   try:
     src_text = f.read().decode('utf8')
     if xhtml:
-      parser = sparrow.compiler.xhtml2ast.XHTML2AST()
+      parser = spitfire.compiler.xhtml2ast.XHTML2AST()
       return parser.parse(src_text)
     else:
       return parse(src_text)
@@ -45,21 +45,21 @@ def parse_file(filename, xhtml=False):
 # good to have a reason for the inconsistency other than laziness or stupidity
 def compile_ast(parse_root,
                 classname,
-                options=sparrow.compiler.analyzer.default_options):
-  ast_root = sparrow.compiler.analyzer.SemanticAnalyzer(
+                options=spitfire.compiler.analyzer.default_options):
+  ast_root = spitfire.compiler.analyzer.SemanticAnalyzer(
     classname, parse_root, options).get_ast()
-  sparrow.compiler.optimizer.OptimizationAnalyzer(
+  spitfire.compiler.optimizer.OptimizationAnalyzer(
     ast_root, options).optimize_ast()
-  code_generator = sparrow.compiler.codegen.CodeGenerator(ast_root, options)
+  code_generator = spitfire.compiler.codegen.CodeGenerator(ast_root, options)
   return code_generator.get_code()
 
 def compile_template(src_text, classname,
-                     options=sparrow.compiler.analyzer.default_options):
+                     options=spitfire.compiler.analyzer.default_options):
   
   return compile_ast(parse(src_text), classname, options)
 
 def compile_file(filename, write_file=False,
-                 options=sparrow.compiler.analyzer.default_options,
+                 options=spitfire.compiler.analyzer.default_options,
                  xhtml=False):
   parse_root = parse_file(filename, xhtml=xhtml)
   src_code = compile_ast(parse_root, filename2classname(filename), options)
@@ -82,7 +82,7 @@ def write_src_file(src_code, filename):
 # this won't recursively import templates, it's just a convenience in the case
 # where you need to create a fresh object directly from raw template file
 def load_template_file(filename, module_name=None,
-                       options=sparrow.compiler.analyzer.default_options,
+                       options=spitfire.compiler.analyzer.default_options,
                        xhtml=False):
   class_name = filename2classname(filename)
   if not module_name:
@@ -93,7 +93,7 @@ def load_template_file(filename, module_name=None,
   return getattr(module, class_name)
 
 def load_template(template_src, template_name,
-                  options=sparrow.compiler.analyzer.default_options):
+                  options=spitfire.compiler.analyzer.default_options):
   class_name = filename2classname(template_name)
   filename = '<%s>' % class_name
   module_name = class_name

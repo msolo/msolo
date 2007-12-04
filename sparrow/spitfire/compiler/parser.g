@@ -1,10 +1,10 @@
 # This parser can parse a simple subset of Cheetah's syntax.
 
-from sparrow.compiler.ast import *
+from spitfire.compiler.ast import *
 
 %%
 
-parser SparrowParser:
+parser SpitfireParser:
   token DOT: '\.'
   token NUM:   '[0-9]+'
   token ID:    '[A-Za-z_][0-9A-Za-z_]*'

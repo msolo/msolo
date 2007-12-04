@@ -1,4 +1,4 @@
-<html xmlns:pyattr="http://sparrow/attr" xmlns:py="http://sparrow/">
+<html xmlns:pyattr="http://spitfire/attr" xmlns:py="http://spitfire/">
   <head>
      
      <meta http-equiv="Content-Type" content="text/html" />

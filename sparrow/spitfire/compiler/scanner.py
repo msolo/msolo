@@ -1,13 +1,13 @@
 import yappsrt
 
-import sparrow.compiler.parser
+import spitfire.compiler.parser
 
-# SparrowScanner uses the order of the match, not the length of the match to
+# SpitfireScanner uses the order of the match, not the length of the match to
 # determine what token to return. I'm not sure how fragille this is long-term,
 # but it seems to have been the right solution for a number of small problems
 # allong the way.
 
-class SparrowScanner(sparrow.compiler.parser.SparrowParserScanner):
+class SpitfireScanner(spitfire.compiler.parser.SpitfireParserScanner):
   def scan(self, restrict):
     """Should scan another token and add it to the list, self.tokens,
     and add the restriction to self.restrictions"""

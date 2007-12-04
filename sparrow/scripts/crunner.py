@@ -7,15 +7,15 @@ import traceback
 
 from pprint import pprint
 
-import sparrow.compiler.parser
-import sparrow.compiler.scanner
-import sparrow.compiler.analyzer
-import sparrow.compiler.optimizer
-import sparrow.compiler.util
-from sparrow.compiler.visitor import print_tree
-analyzer = sparrow.compiler.analyzer
+import spitfire.compiler.parser
+import spitfire.compiler.scanner
+import spitfire.compiler.analyzer
+import spitfire.compiler.optimizer
+import spitfire.compiler.util
+from spitfire.compiler.visitor import print_tree
+analyzer = spitfire.compiler.analyzer
 
-import sparrow.runtime.runner
+import spitfire.runtime.runner
 
 
 def print_tree_walk(node, indent=0):
@@ -37,32 +37,32 @@ def process_file(filename, options):
   opt = analyzer.optimizer_map[options.optimizer_level]
   opt.update(strip_optional_whitespace=options.ignore_optional_whitespace)
 
-  classname = sparrow.compiler.util.filename2classname(filename)
+  classname = spitfire.compiler.util.filename2classname(filename)
   try:
     print_output("compile", filename)
     if not options.quiet:
       print "parse_root walk"
-      parse_root = sparrow.compiler.util.parse_file(filename, options.xhtml)
+      parse_root = spitfire.compiler.util.parse_file(filename, options.xhtml)
       #print_tree_walk(parse_root)
       #print_tree(parse_root)
     
     if not options.quiet:
       print "ast_root walk"
-      ast_root = sparrow.compiler.analyzer.SemanticAnalyzer(
+      ast_root = spitfire.compiler.analyzer.SemanticAnalyzer(
         classname, parse_root, options=opt).get_ast()
       print_tree(ast_root)
 
     if not options.quiet:
       print "optimized ast_root walk"
-      sparrow.compiler.optimizer.OptimizationAnalyzer(
+      spitfire.compiler.optimizer.OptimizationAnalyzer(
         ast_root, options=opt).optimize_ast()
       print_tree(ast_root)
 
     if not options.quiet:
       print "src_code"
-      src_code = sparrow.compiler.codegen.CodeGenerator(
+      src_code = spitfire.compiler.codegen.CodeGenerator(
         ast_root, opt).get_code()
-      #src_code = sparrow.compiler.util.compile_file(filename, options=opt)
+      #src_code = spitfire.compiler.util.compile_file(filename, options=opt)
       for i, line in enumerate(src_code.split('\n')):
         print '% 3s' % (i + 1), line
   except Exception, e:
@@ -74,14 +74,14 @@ def process_file(filename, options):
 
     if options.test_input:
       search_list = [
-        sparrow.runtime.runner.load_search_list(options.test_input)]
+        spitfire.runtime.runner.load_search_list(options.test_input)]
     else:
       search_list = []
       
     raised_exception = False
     try:
       module_name='tests.%s' % classname
-      class_object = sparrow.compiler.util.load_template_file(
+      class_object = spitfire.compiler.util.load_template_file(
         filename, module_name, options=opt, xhtml=options.xhtml)
       template = class_object(search_list=search_list)
       current_output = template.main().encode('utf8')

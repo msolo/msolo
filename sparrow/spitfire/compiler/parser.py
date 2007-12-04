@@ -1,13 +1,13 @@
 # This parser can parse a simple subset of Cheetah's syntax.
 
-from sparrow.compiler.ast import *
+from spitfire.compiler.ast import *
 
 
 from string import *
 import re
 from yappsrt import *
 
-class SparrowParserScanner(Scanner):
+class SpitfireParserScanner(Scanner):
     patterns = [
         ("'[ \\t]*\\+[ \\t]*'", re.compile('[ \t]*\\+[ \t]*')),
         ("'[ \\t]*\\%[ \\t]*'", re.compile('[ \t]*\\%[ \t]*')),
@@ -66,7 +66,7 @@ class SparrowParserScanner(Scanner):
     def __init__(self, str):
         Scanner.__init__(self,None,[],str)
 
-class SparrowParser(Parser):
+class SpitfireParser(Parser):
     def goal(self):
         template = TemplateNode()
         while self._peek('END', 'START_DIRECTIVE', 'SPACE', 'NEWLINE', 'START_PLACEHOLDER', 'TEXT') != 'END':
@@ -643,7 +643,7 @@ class SparrowParser(Parser):
 
 
 def parse(rule, text):
-    P = SparrowParser(SparrowParserScanner(text))
+    P = SpitfireParser(SpitfireParserScanner(text))
     return wrap_error_reporter(P, rule)
 
 if __name__ == '__main__':

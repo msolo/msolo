@@ -14,7 +14,7 @@ class PlaceholderError(KeyError):
   pass
 
 
-class SparrowTemplate(object):
+class SpitfireTemplate(object):
   def __init__(self, search_list=None):
     self.search_list = search_list
     self.repeat = repeater.RepeatTracker()
@@ -102,5 +102,5 @@ def get_available_placeholders(scope):
 
 def enable_psyco(template_class):
   import psyco
-  psyco.bind(SparrowTemplate)
+  psyco.bind(SpitfireTemplate)
   psyco.bind(template_class)

@@ -3,8 +3,8 @@
 import os.path
 import sys
 
-from sparrow.compiler import analyzer
-import sparrow.compiler.util
+from spitfire.compiler import analyzer
+import spitfire.compiler.util
 
 def process_file(filename, options):
   def print_output(*args):
@@ -22,7 +22,7 @@ def process_file(filename, options):
         f = open(options.output_file, 'w')
     else:
       write_file = True
-    src_code = sparrow.compiler.util.compile_file(
+    src_code = spitfire.compiler.util.compile_file(
       filename, write_file, options=opt)
     if options.output_file:
       f.write(src_code)

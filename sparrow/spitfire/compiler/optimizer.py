@@ -1,8 +1,8 @@
 import copy
 import os.path
 
-from sparrow.compiler.ast import *
-from sparrow.compiler.analyzer import *
+from spitfire.compiler.ast import *
+from spitfire.compiler.analyzer import *
 
 
 class OptimizationAnalyzer(object):

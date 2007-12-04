@@ -1,9 +1,9 @@
 import traceback
 import xml.dom.minidom
 
-from sparrow.compiler.ast import *
+from spitfire.compiler.ast import *
 
-import sparrow.compiler.util
+import spitfire.compiler.util
 
 enable_debug = False
 def debug(func_name, dom_node):
@@ -191,7 +191,7 @@ class XHTML2AST(object):
   def make_attr_node(self, attr):
     node_list = []
     new_attr_name = attr.localName
-    attr_ast = sparrow.compiler.util.parse(attr.nodeValue, 'rhs_expression')
+    attr_ast = spitfire.compiler.util.parse(attr.nodeValue, 'rhs_expression')
     node_list.append(TextNode(u' %(new_attr_name)s="' % vars()))
     # fixme: need to guarantee good output - escape sequences etc
     node_list.append(PlaceholderSubstitutionNode(attr_ast))
@@ -204,7 +204,7 @@ class XHTML2AST(object):
     # print "handle_define", node_name
     # fixme: this is a nasty temp hack, it will generate the correct code
     # for 1 define, but multiple expressions won't work
-    ast = sparrow.compiler.util.parse(dom_node.getAttribute(attr_name),
+    ast = spitfire.compiler.util.parse(dom_node.getAttribute(attr_name),
                                       'argument_list')
     dom_node.removeAttribute(attr_name)
     node_list.extend(ast)
@@ -215,7 +215,7 @@ class XHTML2AST(object):
   def handle_content(self, dom_node, attr_name):
     debug("handle_content", dom_node)
     #traceback.print_stack()
-    expr_ast = sparrow.compiler.util.parse(
+    expr_ast = spitfire.compiler.util.parse(
       dom_node.getAttribute(attr_name), 'rhs_expression')
     dom_node.removeAttribute(attr_name)
     setattr(dom_node, 'has_child_stuff', True)
@@ -234,7 +234,7 @@ class XHTML2AST(object):
     node_name = dom_node.nodeName
     raw_expression = dom_node.getAttribute(attr_name)
     if raw_expression:
-      ast = sparrow.compiler.util.parse(raw_expression, 'argument_list')
+      ast = spitfire.compiler.util.parse(raw_expression, 'argument_list')
     else:
       ast = None
     
@@ -245,7 +245,7 @@ class XHTML2AST(object):
 
   
   def handle_replace(self, dom_node, attr_name):
-    expr_ast = sparrow.compiler.util.parse(
+    expr_ast = spitfire.compiler.util.parse(
       dom_node.getAttribute(attr_name), 'rhs_expression')
     dom_node.removeAttribute(attr_name)
     return [PlaceholderSubstitutionNode(expr_ast)]
@@ -269,7 +269,7 @@ class XHTML2AST(object):
     expr_pieces = dom_node.getAttribute(attr_name).split()
     dom_node.removeAttribute(attr_name)
     target = expr_pieces[0]
-    expr_ast = sparrow.compiler.util.parse(
+    expr_ast = spitfire.compiler.util.parse(
       ' '.join(expr_pieces[1:]), 'rhs_expression')
     node_list = []
     # hack - assumes python syntax
@@ -311,7 +311,7 @@ class XHTML2AST(object):
 
 
   def handle_condition(self, dom_node, attr_name):
-    expr_ast = sparrow.compiler.util.parse(
+    expr_ast = spitfire.compiler.util.parse(
       dom_node.getAttribute(attr_name), 'rhs_expression')
     node_list = []
     if_node = IfNode(expr_ast)
@@ -332,15 +332,15 @@ class XHTML2AST(object):
       
 if __name__ == '__main__':
   import sys
-  import sparrow.compiler.util
+  import spitfire.compiler.util
   x2a = XHTML2AST()
   filename = sys.argv[1]
   tnode = x2a.build_template(filename)
   print tnode
-  classname = sparrow.compiler.util.filename2classname(filename)
-  src = sparrow.compiler.util.compile_ast(tnode, classname)
+  classname = spitfire.compiler.util.filename2classname(filename)
+  src = spitfire.compiler.util.compile_ast(tnode, classname)
   print src
-  module = sparrow.compiler.util.load_module_from_src(src, '<none>', classname)
+  module = spitfire.compiler.util.load_module_from_src(src, '<none>', classname)
   tclass = getattr(module, classname)
   d = {
     'test_x': 'x var',
@@ -354,7 +354,7 @@ if __name__ == '__main__':
     'test_dict': {'key1': 1},
     'test_whitespaced_dict': {'key 1': 1},
     'test_range': range,
-    'content_type': 'test/sparrow',
+    'content_type': 'test/spitfire',
     }
 
   print tclass(search_list=[d]).main()

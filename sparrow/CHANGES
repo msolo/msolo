@@ -1,3 +1,6 @@
+0.5.10 - renamed from 'sparrow' to 'spitfire' - i wonder if i can make it out
+of 0.6 without another rename.
+
 0.5.9 - added support for omit-tag. this required quite a bit of internal
 restructuring and begins to show some of the limitations of stream-based
 templates in a DOM-oriented world. it works, but it feels a little unclean.

@@ -1,7 +1,7 @@
 import copy
 import os.path
 
-from sparrow.compiler.ast import *
+from spitfire.compiler.ast import *
 
 def tree_walker(node):
   yield node

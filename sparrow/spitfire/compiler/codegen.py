@@ -86,15 +86,15 @@ class CodeGenerator(object):
     for n in node.extends_nodes:
       extends.append(self.generate_python(self.build_code(n)[0]))
     if not extends:
-      extends = ['sparrow.runtime.template.SparrowTemplate']
+      extends = ['spitfire.runtime.template.SpitfireTemplate']
 
     extends_clause = ', '.join(extends)
     classname = node.classname
     
-    module_code.append_line('import sparrow.runtime')
-    module_code.append_line('import sparrow.runtime.template')
-    module_code.append_line('import sparrow.runtime.udn')
-    module_code.append_line('from sparrow.runtime.udn import resolve_udn')
+    module_code.append_line('import spitfire.runtime')
+    module_code.append_line('import spitfire.runtime.template')
+    module_code.append_line('import spitfire.runtime.udn')
+    module_code.append_line('from spitfire.runtime.udn import resolve_udn')
     module_code.append_line('')
 
     class_code = CodeNode(
@@ -114,7 +114,7 @@ class CodeGenerator(object):
 
 
     if self.options and self.options.enable_psyco:
-      module_code.append_line('sparrow.runtime.template.enable_psyco(%(classname)s)' % vars())
+      module_code.append_line('spitfire.runtime.template.enable_psyco(%(classname)s)' % vars())
 
     module_code.append_line(run_tmpl % vars(node))
 
@@ -300,8 +300,8 @@ class CodeGenerator(object):
 run_tmpl = """
 
 if __name__ == '__main__':
-  import sparrow.runtime.runner
-  sparrow.runtime.runner.run_template(%(classname)s)
+  import spitfire.runtime.runner
+  spitfire.runtime.runner.run_template(%(classname)s)
 """
 
 
