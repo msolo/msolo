@@ -8,10 +8,16 @@
 import cgi
 import sys
 import timeit
-from StringIO import StringIO
-from genshi.builder import tag
-from genshi.template import MarkupTemplate
-from genshi.template import TextTemplate as NewTextTemplate
+import StringIO
+import cStringIO
+try:
+    from genshi.builder import tag
+    from genshi.template import MarkupTemplate
+    from genshi.template import TextTemplate as NewTextTemplate
+except ImportError:
+    MarkupTemplate = None
+    NewTextTemplate = None
+    genshi = None
 
 try:
     from elementtree import ElementTree as et
@@ -59,7 +65,8 @@ except ImportError:
 table = [dict(a=1,b=2,c=3,d=4,e=5,f=6,g=7,h=8,i=9,j=10)
           for x in range(1000)]
 
-genshi_tmpl = MarkupTemplate("""
+if MakoTemplate:
+    genshi_tmpl = MarkupTemplate("""
 <table xmlns:py="http://genshi.edgewall.org/">
 <tr py:for="row in table">
 <td py:for="c in row.values()" py:content="c"/>
@@ -67,11 +74,11 @@ genshi_tmpl = MarkupTemplate("""
 </table>
 """)
 
-genshi_tmpl2 = MarkupTemplate("""
+    genshi_tmpl2 = MarkupTemplate("""
 <table xmlns:py="http://genshi.edgewall.org/">$table</table>
 """)
 
-genshi_text_tmpl = NewTextTemplate("""
+    genshi_text_tmpl = NewTextTemplate("""
 <table>
 {% for row in table %}<tr>
 {% for c in row.values() %}<td>$c</td>{% end %}
@@ -184,37 +191,38 @@ if CheetahTemplate:
         data = cheetah_template(searchList=[{'table':table}]).respond()
         #print "cheetah", len(data)
 
-def test_genshi():
-    """Genshi template"""
-    stream = genshi_tmpl.generate(table=table)
-    data = stream.render('html', strip_whitespace=False)
-    #print "genshi", len(data)
+if genshi:
+    def test_genshi():
+        """Genshi template"""
+        stream = genshi_tmpl.generate(table=table)
+        data = stream.render('html', strip_whitespace=False)
+        #print "genshi", len(data)
 
-def test_genshi_text():
-    """Genshi text template"""
-    stream = genshi_text_tmpl.generate(table=table)
-    print "test_genshi_text", stream
-    data = stream.render('text')
-    print "test_genshi_text", 'data', stream
+    def test_genshi_text():
+        """Genshi text template"""
+        stream = genshi_text_tmpl.generate(table=table)
+        print "test_genshi_text", stream
+        data = stream.render('text')
+        print "test_genshi_text", 'data', stream
 
-def test_genshi_builder():
-    """Genshi template + tag builder"""
-    stream = tag.TABLE([
-        tag.tr([tag.td(c) for c in row.values()])
-        for row in table
-    ]).generate()
-    stream = genshi_tmpl2.generate(table=stream)
-    stream.render('html', strip_whitespace=False)
+    def test_genshi_builder():
+        """Genshi template + tag builder"""
+        stream = tag.TABLE([
+            tag.tr([tag.td(c) for c in row.values()])
+            for row in table
+        ]).generate()
+        stream = genshi_tmpl2.generate(table=stream)
+        stream.render('html', strip_whitespace=False)
 
-def test_builder():
-    """Genshi tag builder"""
-    stream = tag.TABLE([
-        tag.tr([
-            tag.td(c) for c in row.values()
-        ])
-        for row in table
-    ]).generate()
-    stream.render('html', strip_whitespace=False)
+    def test_builder():
+        """Genshi tag builder"""
+        stream = tag.TABLE([
+            tag.tr([
+                tag.td(c) for c in row.values()
+            ])
+            for row in table
+        ]).generate()
+        stream.render('html', strip_whitespace=False)
 
 if kid:
     kid_tmpl = kid.Template("""
@@ -283,15 +291,63 @@ if neo_cgi:
 </table>""")
         cs.render()
 
+def test_python_cstringio():
+    """cStringIO"""
+    buffer = cStringIO.StringIO()
+    write = buffer.write
+    write('<table>\n')
+    for row in table:
+        write('<tr>\n')
+        for col in row.itervalues():
+            write('<td>\n')
+            write('%s' % col)
+            write('\n</td>\n')
+        write('</tr>\n')
+    write('</table>')
+    return buffer.getvalue()
+
+def test_python_stringio():
+    """StringIO"""
+    buffer = StringIO.StringIO()
+    write = buffer.write
+    
+    write('<table>\n')
+    for row in table:
+        write('<tr>\n')
+        for col in row.itervalues():
+            write('<td>\n')
+            write('%s' % col)
+            write('\n</td>\n')
+        write('</tr>\n')
+    write('</table>')
+    return buffer.getvalue()
+    
+def test_python_array():
+    """list concat"""
+    buffer = []
+    write = buffer.append
+    
+    write('<table>\n')
+    for row in table:
+        write('<tr>\n')
+        for col in row.itervalues():
+            write('<td>\n')
+            write('%s' % col)
+            write('\n</td>\n')
+        write('</tr>\n')
+    write('</table>')
+    return ''.join(buffer)
+
 
 def run(which=None, number=10):
     tests = ['test_builder', 'test_genshi',
-             #'test_genshi_text',
+             'test_genshi_text',
              'test_genshi_builder', 'test_mako', 'test_kid', 'test_kid_et',
              'test_et', 'test_cet', 'test_clearsilver', 'test_django',
              'test_cheetah',
              'test_spitfire', 'test_spitfire_o1',
              'test_spitfire_o2', 'test_spitfire_o3',
+             'test_python_stringio', 'test_python_cstringio', 'test_python_array'
              ]
 
     if which:
