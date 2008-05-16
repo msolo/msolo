@@ -1,0 +1,16 @@
+0.5.4 - added support for unix domain sockets. misc cleanup.
+
+0.5.3 - requires py-fastcgi-1.3, adds support for a timeout between the
+accept() and the first read() on the input socket. this should fix an issue
+with half-opened connections stacking up and causing the server to hang.
+
+0.5.1 - validate the memory usage keys in linux_get_memory_usage to prevent
+crash bug in the 'boss' process
+
+0.5 - removed all of the stats code. this is better handled as another separate
+module. see spyglass.
+
+0.4.1 - added linux-specific memory supervisor and added more error handling
+in the manager.
+
+0.4 - a good, stable release
