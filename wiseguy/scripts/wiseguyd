@@ -97,7 +97,7 @@ if __name__ == '__main__':
   parser.add_option('--max-rss',
                     default=None,
                     type='int',
-                    help='max rss before a child gets a SIGTERM')
+                    help='max RSS (in kilobytes) before a child gets a SIGTERM')
   parser.add_option('--accept-input-timeout',
                     default=1,
                     type='int',
