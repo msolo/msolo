@@ -181,10 +181,12 @@ class PreForkingMixIn(object):
         log.error("child error on exit: %s, %s", pid, status)
 
     def handle_server_profile(
-        self, profile_path, profile_uri, request_count, bias, profiler_module):
+        self, profile_path, profile_uri, request_count, skip_request_count,
+        bias, profiler_module):
         try:
             pid = tuple(self._child_pids)[0]
-            self.spawn_child(profile_path, profile_uri, request_count, bias, profiler_module)
+            self.spawn_child(profile_path, profile_uri, request_count, skip_request_count,
+                             bias, profiler_module)
             os.kill(pid, signal.SIGTERM)
         except:
             log.exception("handle_server_profile")
@@ -211,7 +213,8 @@ class PreForkingMixIn(object):
         return super(PreForkingMixIn, self).error(req, exception)
     
     def spawn_child(self, profile_path=None, profile_uri=None,
-                    max_requests=None, profile_bias=None, profiler_module=None):
+                    max_requests=None, skip_profile_requests=None,
+                    profile_bias=None, profiler_module=None):
         if not self._allow_spawning:
             log.warning('spawn_child is disabled')
             return
@@ -229,6 +232,12 @@ class PreForkingMixIn(object):
                 profile_uri = self._profile_uri
             if max_requests:
                 self._max_requests = max_requests
+            if skip_profile_requests:
+                self._skip_profile_requests = skip_profile_requests
+                # you have to increase the max number of requests to account
+                # for the ones that will be skipped during warmup
+                if self._max_requests is not None:
+                    self._max_requests += skip_profile_requests
 
             if profile_path:
                 if profiler_module is None:
@@ -266,8 +275,12 @@ class PreForkingMixIn(object):
                     last_profile_symlink_name)
                 os.symlink(self._profile.filename, last_profile_link)
 
-            # fixme: is os._exit needed here because this is a fork'd process?
-            os._exit(0)
+            # note: os._exit skips atexit handlers and doesn't flush stdio
+            # buffers. atexit might reasonably be required by an application,
+            # so i'm making calling sys.exit() instead. this seems in line
+            # with other wsgi servers.
+            #os._exit(0)
+            sys.exit(0)
         else:
             # parent
             self._child_pids.add(pid)

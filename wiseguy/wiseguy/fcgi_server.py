@@ -44,6 +44,7 @@ class FCGIServer(object):
         self._max_etime = max_etime
         self._mem_stats = None
         self._request_count = 0
+        self._skip_profile_requests = 0
         self._profile_path = profile_path
         self._profile_uri = profile_uri
         self._profile_uri_regex = None
@@ -92,17 +93,17 @@ class FCGIServer(object):
 
     def init_profile_memory(self):
         # fixme: ugly hack to handle cyclic dependency
-        from wiseguy.preforking import get_memory_stats, MemoryException
+        from wiseguy.preforking import get_memory_usage, MemoryException
         try:
-            self._mem_stats = get_memory_stats(os.getpid())
+            self._mem_stats = get_memory_usage(os.getpid())
         except MemoryException, e:
             log.warning('failed init_profile_memory: %s', str(e))
         
     def handle_profile_memory(self, req):
         # fixme: ugly hack to handle cyclic dependency
-        from wiseguy.preforking import get_memory_stats, MemoryException
+        from wiseguy.preforking import get_memory_usage, MemoryException
         try:
-            current_mem_stats = get_memory_stats(os.getpid())
+            current_mem_stats = get_memory_usage(os.getpid())
         except MemoryException, e:
             log.warning('failed handle_profile_memory: %s', str(e))
             return
@@ -123,6 +124,15 @@ class FCGIServer(object):
             log.info('profile_memory %s %s %s', current,
                      delta, request_uri)
 
+    def _should_profile_request(self):
+        if (self._profile_uri_regex and
+            self._profile_uri_regex.search(req.environ.get('PATH_INFO', ''))):
+            if self._request_count < self._skip_profile_requests:
+                return False
+            return True
+        return False
+                
+            
     def _child_request_loop(self):
         if self._profile_memory:
             self.init_profile_memory()
@@ -137,9 +147,7 @@ class FCGIServer(object):
                 req.environ['wiseguy.start_time'] = time.time()
                 profiling = False
                 try:
-                    if (self._profile_uri_regex and
-                        self._profile_uri_regex.search(
-                        req.environ.get('PATH_INFO', ''))):
+                    if self._should_profile_request():
                         profiling = True
                         log.debug('profile: %s',
                                   req.environ.get('PATH_INFO', ''))

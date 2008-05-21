@@ -1,18 +1,19 @@
 from distutils.core import setup
 
+import wiseguy
 
 setup(
   name="wiseguy",
-  version="0.5.4",
+  version=wiseguy.__version__,
   description="Python WSGI wrapper for py-fastcgi",
-  author="Mike Solomon",
-  author_email="mas63@cornell.edu",
-  license="MIT-style",
+  author=wiseguy.__author__,
+  author_email=wiseguy.__author_email__,
+  license=wiseguy.__license__,
   download_url="",
   platforms=["Posix", "MacOS X", "Windows"],
   classifiers=["Development Status :: 5 - Production/Stable",
                "Intended Audience :: Developers",
-               "License :: OSI Approved :: MIT License",
+               "License :: OSI Approved :: BSD License",
                "Programming Language :: Python",
                "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
                "Topic :: Software Development :: Libraries :: Python Modules"],
@@ -20,4 +21,4 @@ setup(
   ext_package='wiseguy',
   scripts=["scripts/wiseguyd",
            ],
-  ) 
+  )

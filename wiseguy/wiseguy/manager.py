@@ -124,10 +124,11 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 		profile_uri = self._get_str(form, 'profile_uri', None)
 		profiler_module = self._get_str(form, 'profiler_module', 'hotshot')
 		request_count = self._get_int(form, 'request_count', 1000)
+		skip_request_count = self._get_int(form, 'skip_request_count', 1000)
 		bias = self._get_float(form, 'bias', None)
 
 		self.server.fcgi_server.handle_server_profile(
-			profile_path, profile_uri, request_count, bias, profiler_module)
+			profile_path, profile_uri, request_count, skip_request_count, bias, profiler_module)
 		self.send_data('starting profiler: %s (bias: %s).\n' % (profiler_module, bias))
 
 	def handle_server_last_profile_data(self, path, form):
@@ -181,7 +182,9 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 	def log_message(self, format, *args):
 		log.info(format, *args)
 
-def create_http_server(server_address, fcgi_server, server_class=EmbeddedHTTPServer):
+def create_http_server(server_address, fcgi_server, server_class=None):
+	if server_class is None:
+		server_class = EmbeddedHTTPServer
 	httpd = server_class(server_address, WGManagerRequestHandler,
                        fcgi_server)
 	return httpd
