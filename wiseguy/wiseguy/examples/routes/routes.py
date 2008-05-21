@@ -27,7 +27,9 @@ routes.append(('/', 'Controller.index'))
 routes.append(('/hello', 'Controller.hello'))
 
 class RoutesApp():
-    def __init__(self, routes=[]):
+    def __init__(self, routes=None):
+        if routes == None:
+            routes = []
         self.routes = routes
         
     def __call__(self, environ, start_response):
