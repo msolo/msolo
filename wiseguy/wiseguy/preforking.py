@@ -82,7 +82,7 @@ class PreForkingMixIn(object):
         if self._management_address:
             management_server = manager.create_http_server(
                 self._management_address,
-                self)
+                self, self._management_server_class)
         else:
             management_server = None
 
@@ -180,19 +180,38 @@ class PreForkingMixIn(object):
         # a child exitted with a non-zero return code
         log.error("child error on exit: %s, %s", pid, status)
 
-    def handle_server_profile(self, profile_path, profile_uri, request_count):
+    def handle_server_profile(
+        self, profile_path, profile_uri, request_count, bias, profiler_module):
         try:
             pid = tuple(self._child_pids)[0]
-            self.spawn_child(profile_path, profile_uri, request_count)
+            self.spawn_child(profile_path, profile_uri, request_count, bias, profiler_module)
             os.kill(pid, signal.SIGTERM)
         except:
             log.exception("handle_server_profile")
+
+    def handle_server_last_profile_data(self, profile_path):
+        last_profile_link = os.path.join(os.path.abspath(profile_path),
+                                         last_profile_symlink_name)
+        try:
+            f = open(last_profile_link, 'r', 4 * 1024 * 1024)
+            data = f.read()
+            f.close()
+            return (200, data)
+        except IOError, e:
+            if e[0] in (errno.ENOENT,):
+                return (404, str(e))
+            else:
+                return (500, str(e))
+                
+        except Exception, e:
+            log.exception("handle_server_last_profile_data")
+            return (500, str(e))
 
     def error(self, req, exception):
         return super(PreForkingMixIn, self).error(req, exception)
     
     def spawn_child(self, profile_path=None, profile_uri=None,
-                    max_requests=None):
+                    max_requests=None, profile_bias=None, profiler_module=None):
         if not self._allow_spawning:
             log.warning('spawn_child is disabled')
             return
@@ -212,13 +231,24 @@ class PreForkingMixIn(object):
                 self._max_requests = max_requests
 
             if profile_path:
-                import hotshot
+                if profiler_module is None:
+                    profiler_module = self._profiler_module
                 path = os.path.join(
                     os.path.abspath(profile_path),
-                    '%s-%u.hotshot' % (os.path.basename(sys.argv[0]),
-                                       os.getpid()))
-                
-                self._profile = hotshot.Profile(path)
+                    '%s-%u.%s' % (os.path.basename(sys.argv[0]),
+                                  os.getpid(),
+                                  profiler_module))
+                last_profile_link = os.path.join(
+                    os.path.abspath(profile_path),
+                    last_profile_symlink_name)
+                try:
+                    os.remove(last_profile_link)
+                except OSError, e:
+                    if e[0] not in (errno.ENOENT,):
+                        log.exception("error removing symlink: %s",
+                                      last_profile_link)
+                self._profile = get_profiler(profiler_module, path,
+                                             bias=profile_bias)
 
             if profile_uri:
                 import re
@@ -231,6 +261,10 @@ class PreForkingMixIn(object):
 
             if self._profile:
                 self._profile.close()
+                last_profile_link = os.path.join(
+                    os.path.dirname(self._profile.filename),
+                    last_profile_symlink_name)
+                os.symlink(self._profile.filename, last_profile_link)
 
             # fixme: is os._exit needed here because this is a fork'd process?
             os._exit(0)
@@ -312,3 +346,32 @@ if sys.platform == 'linux2':
     get_memory_usage = linux_get_memory_usage
 else:
     get_memory_usage = generic_get_memory_usage
+
+last_profile_symlink_name = 'last_profile'
+
+# make hotshot/profile/cProfile work the same way by selectively wrapping
+# certain classes with a proxy
+def get_profiler(profiler_module, path, bias=None):
+    if profiler_module == 'hotshot':
+        import hotshot
+        prof = hotshot.Profile(path)
+        setattr(prof, 'filename', path)
+        return prof
+    elif profiler_module == 'profile':
+        import profile
+        prof = profile.Profile(bias=bias)
+    elif profiler_module == 'cProfile':
+        import cProfile
+        prof = cProfile.Profile()
+    return ProfileProxy(path, prof)
+
+class ProfileProxy(object):
+    def __init__(self, filename, profile):
+        self.filename = filename
+        self.profile = profile
+
+    def runcall(self, *pargs, **kargs):
+        return self.profile.runcall(*pargs, **kargs)
+
+    def close(self):
+        self.profile.dump_stats(self.filename)

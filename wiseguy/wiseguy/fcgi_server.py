@@ -24,12 +24,15 @@ class FCGIServer(object):
                  workers=5, max_requests=None,
                  max_rss=None, profile_path=None, profile_uri=None,
                  profile_memory=False, accept_input_timeout=0,
-                 max_etime=None, **kargs):
+                 max_etime=None, profiler_module='hotshot', **kargs):
         if kargs:
             log.warning('passing deprecated args: %s', ', '.join(kargs.keys()))
         self._workers = workers
         self._server_address = server_address
         self._management_address = management_address
+        # override in a subclass if you want to customized the management
+        # server instance after the fact
+        self._management_server_class = None
         self._listen_socket = None
         self._listen_fd = 0
         self._accept_input_timeout = accept_input_timeout
@@ -47,6 +50,7 @@ class FCGIServer(object):
         self._profile_memory = profile_memory
         self._profile_memory_min_delta = 0
         self._profile = None
+        self._profiler_module = profiler_module
         # should we allow the a new process to fork?
         self._allow_spawning = True
         
@@ -138,7 +142,7 @@ class FCGIServer(object):
                         req.environ.get('PATH_INFO', ''))):
                         profiling = True
                         log.debug('profile: %s',
-                                  req.environ.get('PATH_INFO', '')) 
+                                  req.environ.get('PATH_INFO', ''))
                         self._profile.runcall(self.handle, req)
                     else:
                         self.handle(req)

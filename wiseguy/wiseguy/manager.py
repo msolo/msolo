@@ -44,6 +44,7 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 		'/': 'handle_default',
 		'/server-cycle': 'handle_server_cycle',
 		'/server-profile': 'handle_server_profile',
+		'/server-profile-data': 'handle_server_last_profile_data',
 		'/server-profile-memory': 'handle_profile_memory',
 		'/server-suspend-spawning': 'handle_suspend_spawning',
 		'/server-resume-spawning': 'handle_resume_spawning',
@@ -77,10 +78,21 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 	def _get_int(self, form, name, default):
 		try:
-			value = int(form[name][0])
+			return int(form[name][0])
 		except (KeyError, IndexError, ValueError), e:
-			value = default
-		return value
+			return default
+
+	def _get_float(self, form, name, default):
+		try:
+			return float(form[name][0])
+		except (KeyError, IndexError, ValueError), e:
+			return default
+
+	def _get_str(self, form, name, default=''):
+		try:
+			return form[name][0]
+		except (KeyError, IndexError), e:
+			return default
 
 	def handle_set_max_rss(self, path, form):
 		max_rss = self._get_int(form, 'max_rss', 0)
@@ -108,21 +120,26 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.send_data('cycled.\n')
 		
 	def handle_server_profile(self, path, form):
-		try:
-			profile_path = form['profile_path'][0]
-		except (KeyError, IndexError), e:
-			profile_path = '/tmp'
-
-		try:
-			profile_uri = form['profile_uri'][0]
-		except (KeyError, IndexError), e:
-			profile_uri = None
-		
+		profile_path = self._get_str(form, 'profile_path', '/tmp')
+		profile_uri = self._get_str(form, 'profile_uri', None)
+		profiler_module = self._get_str(form, 'profiler_module', 'hotshot')
 		request_count = self._get_int(form, 'request_count', 1000)
+		bias = self._get_float(form, 'bias', None)
 
 		self.server.fcgi_server.handle_server_profile(
-			profile_path, profile_uri, request_count)
-		self.send_data('starting profiler.\n')
+			profile_path, profile_uri, request_count, bias, profiler_module)
+		self.send_data('starting profiler: %s (bias: %s).\n' % (profiler_module, bias))
+
+	def handle_server_last_profile_data(self, path, form):
+		profile_path = self._get_str(form, 'profile_path', '/tmp')
+		
+		status, data = self.server.fcgi_server.handle_server_last_profile_data(
+			profile_path)
+		if status == 200:
+			content_type = 'application/octet-stream'
+		else:
+			content_type = None
+		self.send_data(data, status, content_type)
 
 	# note: this sets a variable in the parent - now you need
 	# to cycle the children to actually collect data
@@ -151,7 +168,9 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 		self.send_data(response_data + '\n')
 
 	def send_data(self, response_data, response_code=200,
-								content_type='text/html; charset=utf-8'):
+                content_type=None):
+		if content_type is None:
+			content_type = 'text/html; charset=utf-8'
 		self.send_response(response_code)
 		self.send_header('Cache-Control', 'no-cache')
 		self.send_header('Content-Type', content_type)
@@ -162,9 +181,9 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 	def log_message(self, format, *args):
 		log.info(format, *args)
 
-def create_http_server(server_address, fcgi_server):
-	httpd = EmbeddedHTTPServer(server_address, WGManagerRequestHandler,
-														 fcgi_server)
+def create_http_server(server_address, fcgi_server, server_class=EmbeddedHTTPServer):
+	httpd = server_class(server_address, WGManagerRequestHandler,
+                       fcgi_server)
 	return httpd
 
 
