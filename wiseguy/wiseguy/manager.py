@@ -124,7 +124,7 @@ class WGManagerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 		profile_uri = self._get_str(form, 'profile_uri', None)
 		profiler_module = self._get_str(form, 'profiler_module', 'hotshot')
 		request_count = self._get_int(form, 'request_count', 1000)
-		skip_request_count = self._get_int(form, 'skip_request_count', 1000)
+		skip_request_count = self._get_int(form, 'skip_request_count', 0)
 		bias = self._get_float(form, 'bias', None)
 
 		self.server.fcgi_server.handle_server_profile(

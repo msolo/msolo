@@ -125,8 +125,12 @@ class FCGIServer(object):
                      delta, request_uri)
 
     def _should_profile_request(self):
-        if (self._profile_uri_regex and
-            self._profile_uri_regex.search(req.environ.get('PATH_INFO', ''))):
+        # this a little fugly
+        if (self._profile and
+            (not self._profile_uri_regex or
+             (self._profile_uri_regex and
+              self._profile_uri_regex.search(
+                req.environ.get('PATH_INFO', ''))))):
             if self._request_count < self._skip_profile_requests:
                 return False
             return True

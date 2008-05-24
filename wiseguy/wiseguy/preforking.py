@@ -263,10 +263,14 @@ class PreForkingMixIn(object):
                 import re
                 self._profile_uri_regex = re.compile(profile_uri)
 
-            if self._profile and not self._profile_uri_regex:
-                self._profile.runcall(self._child_request_loop)
-            else:
-                self._child_request_loop()
+            # this was a premature optimization to toggle in and out of profile
+            # mode only if you were actually profiling a specific servlet
+            # pattern - it seems better to just wrap this in the
+            # _should_profile_request function
+            #if self._profile and not self._profile_uri_regex:
+            #    self._profile.runcall(self._child_request_loop)
+            #else:
+            self._child_request_loop()
 
             if self._profile:
                 self._profile.close()
@@ -279,8 +283,12 @@ class PreForkingMixIn(object):
             # buffers. atexit might reasonably be required by an application,
             # so i'm making calling sys.exit() instead. this seems in line
             # with other wsgi servers.
-            #os._exit(0)
-            sys.exit(0)
+            #
+            # ok, so the problem is that sys.exit() closes other file
+            # descriptors that may have been inherited after the initial fork,
+            # for instance the embedded managment server
+            #sys.exit(0)
+            os._exit(0)
         else:
             # parent
             self._child_pids.add(pid)
