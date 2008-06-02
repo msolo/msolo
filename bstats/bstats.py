@@ -1,11 +1,13 @@
 import os.path
 import pstats
 import re
+import sys
 
-from itertools import imap
+from itertools import imap, chain
+from pstats import add_func_stats, func_std_string
 
 __author__ = 'Mike Solomon <mas63 @t cornell d0t edu>'
-__version__ = '0.2'
+__version__ = '0.3'
 __license__ = 'BSD License'
 
 
@@ -130,7 +132,74 @@ functions, but occaisionally I find it useful.
 pstats.Stats.sort_arg_dict_default['fallout'] = (
   ((1, 1), (3,-1)), "fallout function")
 
+
+# strip directories smartly, so that we know where system libraries are
+# located - items without absolute paths are assumed to be project modules
+def strip_dir_from_module(func_name, sys_lib_prefixes=()):
+  filename, line, name = func_name
+  if os.path.isabs(filename):
+    for prefix in sys_lib_prefixes:
+      if prefix and filename.startswith(prefix):
+        filename = filename[len(prefix):]
+        break
+  return filename, line, name
+
+def strip_dir_from_module_regex(func_name, pattern):
+  filename, line, name = func_name
+  if os.path.isabs(filename):
+    m = pattern.match(filename)
+    if m:
+      filename = m.group(1)
+  return filename, line, name
+
+def create_strip_func(additional_system_paths):
+  pattern = re.compile('(?:/.*python2.4(?:/site-packages)?|%s)/?(.+)$' %
+                       '|'.join(chain(sys.path, additional_system_paths)))
+  def strip_func(func_name):
+    return strip_dir_from_module_regex(func_name, pattern)
+  return strip_func
+  
+
 class BrowseableStats(pstats.Stats):
+  def strip_dirs(self, additional_system_paths=()):
+    #     def strip_func(func_name):
+    #       return strip_dir_from_module_regex(func_name, pattern)
+    #     path_prefixes = set()
+    #     for path in chain(sys.path, additional_system_paths):
+    #       if not path:
+    #         continue
+    #       if path[-1] != '/':
+    #         path = path + '/'
+    #       path_prefixes.add(path)
+    strip_func = create_strip_func(additional_system_paths)
+    oldstats = self.stats
+    self.stats = newstats = {}
+    max_name_len = 0
+    for func, (cc, nc, tt, ct, callers) in oldstats.iteritems():
+      newfunc = strip_func(func)
+      if len(func_std_string(newfunc)) > max_name_len:
+        max_name_len = len(func_std_string(newfunc))
+      newcallers = {}
+      for func2, caller in callers.iteritems():
+        newcallers[strip_func(func2)] = caller
+
+      if newfunc in newstats:
+        newstats[newfunc] = add_func_stats(
+                    newstats[newfunc],
+                    (cc, nc, tt, ct, newcallers))
+      else:
+        newstats[newfunc] = (cc, nc, tt, ct, newcallers)
+    old_top = self.top_level
+    self.top_level = new_top = {}
+    for func in old_top:
+      new_top[strip_func(func)] = None
+
+    self.max_name_len = max_name_len
+
+    self.fcn_list = None
+    self.all_callees = None
+    return self
+
   def get_top_items(self, sort_key, count, filter_function=None):
     self.sort_stats(sort_key)
     if filter_function:
@@ -232,6 +301,16 @@ class BrowseableStats(pstats.Stats):
     d['func_name'] = pstats.func_std_string(func)
     return d
 
+  def min_call_count_filter(self, call_count):
+    def filter_function(function_list):
+      results = []
+      for func in function_list:
+        stats = self.func_stats(func)
+        if stats['ncalls'] >= call_count:
+          results.append(func)
+      return results
+    return filter_function
+    
   def call_count_filter(self, call_count):
     def filter_function(function_list):
       results = []
@@ -293,7 +372,43 @@ def load(filename):
 def load_hotshot_profile(filename):
   import hotshot.stats
   stats = hotshot.stats.load(filename)
+
   pstats_path = os.path.splitext(filename)[0] + '.pstats'
   stats.dump_stats(pstats_path)
   bs = BrowseableStats(pstats_path)
+  return bs
+
+def create_function_normalizer(additional_sys_paths,
+                               ignore_line_number=False):
+  strip_func = create_strip_func(additional_sys_paths)
+  if ignore_line_number:
+    def _function_normalizer(func_name):
+      filename, line, name = strip_func(func_name)
+      return filename, None, name
+  else:
+    def _function_normalizer(func_name):
+      return strip_func(func_name)
+    
+  return _function_normalizer
+  
+app_io_functions = [
+  ]
+def load_sureshot_profile(filename, additional_io_functions=app_io_functions,
+                          additional_sys_paths=()):
+  import sureshot
+  io_functions = list(sureshot.default_io_functions)
+  io_functions.extend(additional_io_functions)
+  sys_lib_paths = list(sys.path)
+  sys_lib_paths.extend(additional_sys_paths)
+
+  function_normalizer = create_function_normalizer(
+    additional_sys_paths, ignore_line_number=True)
+  
+  stats = sureshot.StatsLoader(filename).load(
+    io_functions, function_normalizer)
+  
+  pstats_path = os.path.splitext(filename)[0] + '.pstats'
+  stats.dump_stats(pstats_path)
+  bs = BrowseableStats(pstats_path)
+  bs.strip_dirs(additional_sys_paths)
   return bs
