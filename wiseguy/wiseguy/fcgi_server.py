@@ -124,7 +124,7 @@ class FCGIServer(object):
             log.info('profile_memory %s %s %s', current,
                      delta, request_uri)
 
-    def _should_profile_request(self):
+    def _should_profile_request(self, req):
         # this a little fugly
         if (self._profile and
             (not self._profile_uri_regex or
@@ -151,7 +151,7 @@ class FCGIServer(object):
                 req.environ['wiseguy.start_time'] = time.time()
                 profiling = False
                 try:
-                    if self._should_profile_request():
+                    if self._should_profile_request(req):
                         profiling = True
                         log.debug('profile: %s',
                                   req.environ.get('PATH_INFO', ''))
