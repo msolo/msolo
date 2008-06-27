@@ -381,10 +381,11 @@ def get_profiler(profiler_module, path, bias=None):
     elif profiler_module == 'profile':
         import profile
         prof = profile.Profile(bias=bias)
+        return PureProfileProxy(path, prof)
     elif profiler_module == 'cProfile':
         import cProfile
         prof = cProfile.Profile()
-    return ProfileProxy(path, prof)
+        return ProfileProxy(path, prof)
 
 class ProfileProxy(object):
     def __init__(self, filename, profile):
@@ -396,3 +397,10 @@ class ProfileProxy(object):
 
     def close(self):
         self.profile.dump_stats(self.filename)
+
+class PureProfileProxy(ProfileProxy):
+    def runcall(self, *pargs, **kargs):
+        result = self.profile.runcall(*pargs, **kargs)
+        # need this call to reset the profiler
+        self.profile.create_stats()
+        return result
