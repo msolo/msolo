@@ -1,3 +1,6 @@
+0.5.7 - added init/exit handlers to allow more code control within the child
+process.
+
 0.5.6 - add a warm-up request count for profiling so you can more easily 
 sample a "hot" server. fixed the macro memory profiler.
 

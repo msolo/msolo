@@ -52,6 +52,8 @@ class FCGIServer(object):
         self._profile_memory_min_delta = 0
         self._profile = None
         self._profiler_module = profiler_module
+        self._init_functions = []
+        self._exit_functions = []
         # should we allow the a new process to fork?
         self._allow_spawning = True
         
@@ -180,6 +182,36 @@ class FCGIServer(object):
                 self.handle_profile_memory(req)
 
 
+    def register_init_function(self, function, *pargs, **kargs):
+        """these run in the child process prior to starting the request loop"""
+        _register_function(self._init_functions, function, pargs, kargs)
+
+    def register_exit_function(self, function, *pargs, **kargs):
+        """these run in the child process, after the request loop completes"""
+        _register_function(self._exit_functions, function, pargs, kargs)
+
+    def _run_init_functions(self):
+        """run functions in FIFO order, raise all exceptions"""
+        for (func, targs, kargs) in self._init_functions:
+            try:
+                func(*targs, **kargs)
+            except:
+                # log in case other application logging is not yet initialized
+                log.exception('exception during init function')
+                raise
+        
+    def _run_exit_functions(self):
+        """run exit functions in LIFO order - mimic atexit functionality"""
+        exc_info = None
+        while self._exit_functions:
+            func, targs, kargs = self._exit_functions.pop()
+            try:
+                func(*targs, **kargs)
+            except SystemExit:
+                log.exception('SystemExit raised during exit function')
+            except:
+                log.exception('exception during exit function')
+
     def error(self, req, e):
         """Override me"""
         raise NotImplementedError
@@ -212,3 +244,10 @@ def handle_io_error(_exception):
 def compute_memory_delta(mem_stats1, mem_stats2):
     return dict([(key, value - mem_stats1.get(key, 0))
                  for key, value in mem_stats2.iteritems()])
+
+def _register_function(function_list, function, pargs, kargs):
+    function_spec = (function, pargs, kargs)
+    if function_spec in self.function_list:
+        raise FCGIException("can't register duplicate function: %s",
+                            function_spec)
+    function_list.append(function_spec)

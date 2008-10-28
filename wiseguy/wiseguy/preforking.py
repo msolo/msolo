@@ -263,13 +263,10 @@ class PreForkingMixIn(object):
                 import re
                 self._profile_uri_regex = re.compile(profile_uri)
 
-            # this was a premature optimization to toggle in and out of profile
-            # mode only if you were actually profiling a specific servlet
-            # pattern - it seems better to just wrap this in the
-            # _should_profile_request function
-            #if self._profile and not self._profile_uri_regex:
-            #    self._profile.runcall(self._child_request_loop)
-            #else:
+            # run any initialization that must be done in the child post fork
+            # do it here so we can get most of the wiseguy scaffold in place
+            # prior
+            self._run_init_functions()
             self._child_request_loop()
 
             if self._profile:
@@ -288,7 +285,13 @@ class PreForkingMixIn(object):
             # descriptors that may have been inherited after the initial fork,
             # for instance the embedded managment server
             #sys.exit(0)
-            os._exit(0)
+            try:
+                # emulating the atexit() functionality here - you want certain
+                # thing to tear down, but others (inherited file descriptors
+                # for instance) to be left intact
+                self._run_exit_functions()
+            finally:
+                os._exit(0)
         else:
             # parent
             self._child_pids.add(pid)
