@@ -247,7 +247,7 @@ def compute_memory_delta(mem_stats1, mem_stats2):
 
 def _register_function(function_list, function, pargs, kargs):
     function_spec = (function, pargs, kargs)
-    if function_spec in self.function_list:
+    if function_spec in function_list:
         raise FCGIException("can't register duplicate function: %s",
                             function_spec)
     function_list.append(function_spec)
