@@ -1,3 +1,4 @@
+0.5.8 - added a fix for python 2.6 changes to the embedded http server
 0.5.7 - added init/exit handlers to allow more code control within the child
 process.
 

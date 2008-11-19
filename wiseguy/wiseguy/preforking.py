@@ -140,9 +140,12 @@ class PreForkingMixIn(object):
 
             # NOTE: the timeout socket in the server assurs we don't block too
             # long here. wish i could multiplex listen for obituaries and
-            # incoming connections with the same mechanesm
+            # incoming connections with the same mechanism
             if management_server:
-                management_server.handle_request()
+                if sys.version_info[:2] >= (2, 6):
+                    management_server._handle_request_noblock()
+                else:
+                    management_server.handle_request()
 
             while (not self._quit and
                    len(self._child_pids) < self._workers):
