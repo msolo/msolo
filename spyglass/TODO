@@ -1,0 +1,12 @@
+ * remove items from the historical counters
+   * might need to start recording update times to track when a value is stale
+ * some kind of integration with RRD to allow more data tracking
+   * not sure if there is any benefit to putting more RRA inside one RRD
+     * does reduce the total number of files per directory
+     * might be cheaper to only have to update few files
+ * what is the best way to do the proc file? could a fifo be made to act as a
+   notification?
+   * have a separate thread blocked on os.open('spyglass.proc', os.O_RDONLY)
+   * build it all into the http handler and rely on curl?
+ * write the procfile atomically
+ * make spyglass rotate its primary log

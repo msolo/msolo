@@ -1,0 +1,31 @@
+0.6.3 - cleaned up exponential decay rates
+fixed for network code for python 2.6
+
+0.6.2 - implemented better time-based periodic execution.
+
+0.6.1 - enable deferred io by default. fixed up key validation. refactored
+periodic execution. seems a bit too "random" at this point - might have to
+redo it again to be more time-based.
+
+0.6 - added deferred io so regular writing of the proc and state files don't
+block the event loop when the disks on the host machine are busy. prune unused
+keys after some period of inactivity. reject unruly key patterns in the client
+and periodically revalidate entries in the rate map.
+
+0.5.1 - patch to prevent exception when you query after a restart and there are no stats
+
+0.5 - added http thread to the server process to handle stats requests
+decomped the handler code so UDP and TCP protocols can use the same routines
+added new summarization routines
+added support for the type of stats that wiseguy used to track
+
+0.4.1 - removed senseless timeouts on the server side
+improved handling of empty responses
+
+0.4 - further tweaks to SPUDP - added generic server. added event history - no
+longer just approximate rates, but some amount of data for a fixed window of
+time (15 minutes). added lifetime event window (not sure how useful this is).
+
+0.3 - replace ad hoc udp crap with SPUDP - more robust packet handler
+
+0.2.1 - a good, stable release
