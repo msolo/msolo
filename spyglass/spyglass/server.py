@@ -39,7 +39,8 @@ class RateMap(dict):
         period=self.period)
   
   def merge(self, counter_map, now=None):
-    for key, value in counter_map.iteritems():
+    # don't bother with the individual time_updated fields
+    for key, (value, time_updated) in counter_map.iteritems():
       self.increment(key, value, now)
 
   def get_rate(self, key, decay_window, now=None):
@@ -91,8 +92,12 @@ class PeriodicTask(object):
 
 
 class SpyglassServer(spyglass.spudp.SPUDPServer):
-  alarm_interval = 30
+  _alarm_interval = 30
   _restore_attributes = ('event_collector', 'rate_map', 'event_history')
+
+  @property
+  def alarm_interval(self):
+    return min(self._alarm_interval, self.maximum_counter_inactivity)
   
   # maximum_counter_inactivity - time in seconds after which a rate counter is
   # considered stale and prunable
@@ -129,15 +134,19 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
                 'handle_get_load_average')
     self.register_handler(MSG_TYPE_GET_STATS, 'handle_get_stats')
 
-    # checkpoint recovery state every 5 minutes
     self.register_periodic_task(self.rate_map.prune,
       (self.maximum_counter_inactivity,), {}, self.maximum_counter_inactivity)
+    self.register_periodic_task(self.event_history.lifetime_collector.prune,
+      (self.maximum_counter_inactivity,), {}, self.maximum_counter_inactivity)
+    # checkpoint recovery state every 5 minutes
     self.register_periodic_task(self._save_state, (), {}, 300)
     self.register_periodic_task(self.write_proc_file, (), {}, 30)
     
   # execution_interval - time in seconds between calls
   def register_periodic_task(self, function, pargs, kargs,
     execution_interval):
+    log.debug("register_periodic_task: %s %s %s", function, execution_interval,
+              self.alarm_interval)
     self.periodic_tasks.append(
       PeriodicTask(function, pargs, kargs, execution_interval,
                    self.alarm_interval))
@@ -149,7 +158,7 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
         try:
           task()
           task.last_exec_time = now
-          #log.info('periodic task: %s', task)
+          log.debug('periodic task: %s', task)
         except:
           log.exception('periodic task: %s', task)
 
@@ -173,11 +182,9 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
            for attr in self._restore_attributes])
     fdata = pickle.dumps(data, pickle.HIGHEST_PROTOCOL)
     if self.enable_deferred_io:
-      self.dio_manager.write_file(self._state_path, fdata)
+      self.dio_manager.async_write_file(self._state_path, fdata)
     else:
-      f = open(self._state_path, 'w')
-      f.write(fdata)
-      f.close()
+      self.dio_manager.sync_write_file(self._state_path, fdata)
   
   def _restore_state(self):
     if not self._state_path:
@@ -216,11 +223,9 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
       return
     data = '\n'.join(self.rate_map.get_log_lines(show_all_values=True)) + '\n'
     if self.enable_deferred_io:
-      self.dio_manager.write_file(self._proc_path, data)
+      self.dio_manager.async_write_file(self._proc_path, data)
     else:
-      f = open(self._proc_path, 'w')
-      f.write(data)
-      f.close()
+      self.dio_manager.sync_write_file(self._proc_path, data)
   
 
 signal_list = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGALRM)

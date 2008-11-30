@@ -69,10 +69,18 @@ class DeferredIOManager(object):
       self.job_queue.put_nowait(QueueItem(self._write_file, pargs, kargs))
     except Full:
       raise DeferredIOError("deferred io queue full")
-    
 
-  def _write_file(self, filename, data):
-    f = open(filename, 'w', self.buffer_size)
+  async_write_file = write_file
+
+  def _write_file(self, filename, data, atomic=True):
+    if atomic:
+      tmp_path = filename + '.tmp'
+    else:
+      tmp_path = filename
+    f = open(tmp_path, 'w', self.buffer_size)
     f.write(data)
     f.close()
-  
+    if atomic:
+      os.rename(tmp_path, filename)
+
+  sync_write_file = _write_file

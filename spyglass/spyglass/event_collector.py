@@ -1,7 +1,7 @@
 import copy
 import logging
 import re
-
+import time
 
 invalid_pattern = re.compile('[^-_\.A-Za-z0-9]')
 # allow certain string patterns and int/long values
@@ -20,18 +20,23 @@ class EventCollectorException(Exception):
 
 
 class CounterMap(dict):
-  def increment(self, key, increment=1):
+  def increment(self, key, increment=1, now=None):
     if not is_valid_key(key):
       logging.warning("invalid key: '%s'", key)
       return
     try:
-      self[key] += increment
+      value, time_updated = self[key]
     except KeyError:
-      self[key] = increment
+      value = 0
+      time_updated = now
+    value += increment
+    if now > time_updated:
+      time_updated = now
+    self[key] = (value, time_updated)
       
   def merge(self, counter_map):
-    for key, value in counter_map.iteritems():
-      self.increment(key, value)
+    for key, (value, time_updated) in counter_map.iteritems():
+      self.increment(key, value, time_updated)
 
   def get_log_lines(self, concise=False):
     if concise:
@@ -41,6 +46,13 @@ class CounterMap(dict):
       return ['%s:%s' % (key, value)
               for key, value in sorted(self.iteritems())]
 
+  def prune(self, maximum_inactivity=3600):
+    expiration_time = time.time() - maximum_inactivity
+    for key, (value, time_updated) in self.items():
+      if (time_updated < expiration_time or
+          not is_valid_key(key)):
+        del self[key]
+
 
 # this is a map of countermaps
 class ExecTimeMap(dict):
@@ -49,18 +61,22 @@ class ExecTimeMap(dict):
     self.granularity = granularity
 
   # exec_time - time in seconds
-  def log_exec_time(self, key, exec_time):
+  def log_exec_time(self, key, exec_time, now=None):
     if not is_valid_key(key):
       logging.warning("invalid key: '%s'", key)
       return
     # normalize to granularity
     exec_time_ms = int(exec_time * 1000 / self.granularity) * self.granularity
     try:
-      self[key].increment(exec_time_ms)
+      cm, time_updated = self[key]
     except KeyError:
       cm = CounterMap()
-      self[key] = cm
-      cm.increment(exec_time_ms)
+      time_updated = now
+
+    cm.increment(exec_time_ms)
+    if now > time_updated:
+      time_updated = now
+    self[key] = (cm, time_updated)
 
   def merge(self, exec_time_map):
     for key, counter_map in exec_time_map.iteritems():
@@ -68,6 +84,13 @@ class ExecTimeMap(dict):
         self[key].merge(counter_map)
       except KeyError:
         self[key] = copy.copy(counter_map)
+
+  def prune(self, maximum_inactivity=3600):
+    expiration_time = time.time() - maximum_inactivity
+    for key, (value, time_updated) in self.items():
+      if (time_updated < expiration_time or
+          not is_valid_key(key)):
+        del self[key]
 
   # get a resonably good looking summary of the data
   def get_lines(self):
@@ -94,7 +117,6 @@ class ExecTimeMap(dict):
       x = '%(min).0f/%(average).0f/%(max).0f/%(std_dev).0f %(samples)u' % summary_stats
       lines.append('%s: %s' % (script, x))
     return lines
-
 
   # fixme: this is highly inefficient because you are growing large
   # array to pass into the stat function - better to do some clever math
@@ -123,6 +145,10 @@ class EventCollector(object):
   def merge(self, collector):
     self.counter_map.merge(collector.counter_map)
     self.exec_time_map.merge(collector.exec_time_map)
+
+  def prune(self, maximum_inactivity=3600):
+    self.counter_map.prune(maximum_inactivity)
+    self.exec_time_map.prune(maximum_inactivity)
 
   def __str__(self):
     return '\n'.join(self.get_log_lines())

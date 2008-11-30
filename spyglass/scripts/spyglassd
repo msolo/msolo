@@ -51,6 +51,9 @@ if __name__ == '__main__':
                     action="callback", callback=validate_log_level,
                     type="str", nargs=1,
                     help="set the base log level")
+  parser.add_option("--maximum-counter-inactivity", default=3600,
+                    action="store", type="int",
+                    help="set the pruning frequency for stale counters")
   
   parser.add_option("--no-stats-listener",
                     action="store_true",
@@ -97,7 +100,8 @@ if __name__ == '__main__':
       options.bind_address,
       log_path=options.log_file,
       state_path=options.state_file,
-      proc_path=options.proc_file)
+      proc_path=options.proc_file,
+      maximum_counter_inactivity=options.maximum_counter_inactivity)
 
     if not options.no_stats_listener:
       spyglass.stats_server.spawn_http_server_thread(
