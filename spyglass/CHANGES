@@ -1,8 +1,7 @@
-0.7 - factored out some hard-coded key names
-export raw rate data via http
-
-0.6.3 - cleaned up exponential decay rates
-fixed for network code for python 2.6
+0.7 - added percentile breakdown for execution time stats.
+added new /server-rates handler for decay stats.
+factored out a few keys that were wsgi specific.
+added spyglassd stats collector daemon.
 
 0.6.2 - implemented better time-based periodic execution.
 

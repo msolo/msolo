@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+
+import logging
+import logging.handlers
+import sys
+
+import spyglass.event_collector
+import spyglass.server
+import spyglass.stats_server
+
+
+if __name__ == '__main__':
+  from optparse import OptionParser, OptionValueError
+  
+  def validate_bind_address(option, opt_str, value, parser):
+    try:
+      host, port = value.split(':')
+      setattr(parser.values, option.dest, (host, int(port)))
+    except ValueError:
+      raise OptionValueError("%s option invalid" % opt_str)
+    
+  def validate_log_level(option, opt_str, value, parser):
+    try:
+      log_level = logging.getLevelName(value)
+      setattr(parser.values, option.dest, int(log_level))
+    except ValueError:
+      raise OptionValueError("%s error, unknown log level: %s" %
+                   (opt_str, value))
+    
+  parser = OptionParser()
+  parser.add_option("--bind-address",
+                    action="callback",  callback=validate_bind_address,
+                    type="str", nargs=1,
+                    help="udp stats listener")
+  parser.add_option("-d", "--daemonize",
+                    action="store_true",
+                    help="run as a daemon")
+  parser.add_option("--log-file", default=None,
+                    action="store",
+                    help="set the path to the log file")
+  parser.add_option("--state-file", default=None,
+                    action="store",
+                    help="set the path to the state file")
+  parser.add_option("--proc-file", default=None,
+                    action="store",
+                    help="set the path to the proc file")
+  parser.add_option("--error-log-file", default=None,
+                    action="store",
+                    help="set the path to the log file")
+  parser.add_option("--error-log-level", default=logging.INFO,
+                    action="callback", callback=validate_log_level,
+                    type="str", nargs=1,
+                    help="set the base log level")
+  
+  parser.add_option("--no-stats-listener",
+                    action="store_true",
+                    help="disable HTTP stats")
+  parser.add_option("--x-psyco-full",
+                    action="store_true",
+                    help="enable psyco for all functions")
+  parser.add_option("--x-psyco-profile",
+                    action="store_true",
+                    help="enable psyco profiler")
+  parser.add_option("--x-profile-path",
+                    help="path to profile data path")
+  
+  (options, args) = parser.parse_args()
+
+  if not options.bind_address:
+    print >> sys.stderr, "no bind address - exitting"
+    sys.exit(1)
+
+  if options.daemonize:
+    import dante.daemon
+    dante.deamon.create_daemon(options.error_log_file)
+
+  if options.x_psyco_full or options.x_psyco_profile:
+    import psyco
+
+    if options.x_psyco_full:
+      psyco.full()
+    elif options.x_psyco_profile:
+      psyco.log()
+      psyco.profile(0.3)
+
+  if options.error_log_file:
+    log_handler = logging.handlers.TimedRotatingFileHandler(
+      options.error_log_file, 'midnight')
+  else:
+    log_handler = None
+  logging.basicConfig(level=options.error_log_level,
+            format='%(asctime)s %(levelname)s %(message)s',
+            stream=log_handler)
+
+  try:
+    spyserv = spyglass.server.create_udp_server(
+      options.bind_address,
+      log_path=options.log_file,
+      state_path=options.state_file,
+      proc_path=options.proc_file)
+
+    if not options.no_stats_listener:
+      spyglass.stats_server.spawn_http_server_thread(
+        options.bind_address, spyserv)
+      
+    if options.x_profile_path:
+      import hotshot
+      profiler = hotshot.Profile(options.x_profile_path)
+      profiler.runcall(spyserv.serve_forever)
+      profiler.close()
+    else:
+      spyserv.serve_forever()
+  except KeyboardInterrupt:
+    pass
+  except:
+    logging.exception('unhandled exception')
