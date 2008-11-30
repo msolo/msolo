@@ -176,18 +176,31 @@ def close_collector(event_collector):
   __remove_collector()
   
 
-def compute_statistics(numeric_range):
-  # return {median, average, std_dev, min, max} of a sequence
+def compute_statistics(numeric_range, percentile_list=None):
+  # percentile_list is a list of percentiles to break out [99, 95, 90, ...]
+  # return {median, average, std_dev, min, max, sample, percentile_map}
+  #   of a sequence. a few stats depend on sorting - others are indifferent
+  sample_count = len(numeric_range)
+  numeric_range.sort()
   total = sum(numeric_range)
-  avg = float(total) / len(numeric_range)
+  avg = float(total) / sample_count
   sdsq = sum([(x-avg)**2 for x in numeric_range])
-  median = sorted(numeric_range)[len(numeric_range) // 2]
-  std_dev = (sdsq / (len(numeric_range) - 1 or 1)) ** 0.5
+  median = numeric_range[sample_count // 2]
+  std_dev = (sdsq / (sample_count - 1 or 1)) ** 0.5
+
+  percentile_map = {}
+  if percentile_list:
+    for percentile in percentile_list:
+      sample_index = int(sample_count * (percentile / 100.0))
+      percentile_map[percentile] = numeric_range[sample_index]
+      
+  
   return {
     'median': median,
     'average': avg,
     'std_dev': std_dev,
     'min': min(numeric_range),
     'max': max(numeric_range),
-    'samples': len(numeric_range),
+    'samples': sample_count,
+    'percentile_map': percentile_map,
   }

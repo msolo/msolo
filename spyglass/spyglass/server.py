@@ -244,14 +244,15 @@ class SpyglassHandler(object):
     lines = ec.exec_time_map.get_stats_log_lines()
     return lines
 
-  def get_load_average_lines(self):
+  def get_load_average_lines(self, rate_key='wsgi.request',
+                             error_key='wsgi.error'):
     event_history = self.get_event_history()
     ec = event_history.get_lifetime_aggregate()
     lines = []
     lines.append(
-      'response_count: %s' % ec.counter_map.get('wsgi.request', 0))
-    lines.append('error_count: %s' % ec.counter_map.get('wsgi.error', 0))
-    req_avg = event_history.get_req_avg()
+      'response_count: %s' % ec.counter_map.get(rate_key, 0))
+    lines.append('error_count: %s' % ec.counter_map.get(error_key, 0))
+    req_avg = event_history.get_rate_avg(rate_key)
     req_avg_str = ' '.join(['%.2f' % x for x in req_avg])
     lines.append('req_averages: %s' % req_avg_str)
     return lines
@@ -264,6 +265,9 @@ class SpyglassHandler(object):
       lines.extend(self.get_exec_lines(minutes, lifetime))
     return lines
 
+  def get_rates_lines(self):
+    return self.get_data_server().rate_map.get_log_lines()
+
 
 # DatagramRequestHandler doesn't look that robust, let's use a home-grown
 # thing for now.
@@ -271,6 +275,9 @@ class SpyglassRequestHandler(spyglass.spudp.SPUDPRequestHandler,
                SpyglassHandler):
   def log_message(self, format, *args):
     log.info(format, *args)
+
+  def get_data_server(self):
+    return self.server
 
   def get_event_history(self):
     return self.server.event_history
@@ -286,7 +293,7 @@ class SpyglassRequestHandler(spyglass.spudp.SPUDPRequestHandler,
     return 'OK'
 
   def handle_rates(self, msg_type, data):
-    return '\n'.join(self.server.rate_map.get_log_lines())
+    return self.get_rates_lines()
 
   def handle_get_rate(self, msg_type, data):
     (key, decay_window) = data
@@ -300,12 +307,12 @@ class SpyglassRequestHandler(spyglass.spudp.SPUDPRequestHandler,
     return '\n'.join(self.get_exec_lines(minutes))
 
   def handle_get_load_average(self, msg_type, data):
-    return '\n'.join(self.get_load_average_lines())
+    (kargs, ) = data
+    return '\n'.join(self.get_load_average_lines(**kargs))
 
   def handle_get_stats(self, msg_type, data):
     (args, kargs) = data
-    lines = self.get_stats_lines(kargs['details'], kargs['minutes'],
-                   kargs['lifetime'])
+    lines = self.get_stats_lines(**kargs)
     return '\n'.join(lines)
 
   # data - a list of tuples [(aggregate_name, regex_pattern), ...]

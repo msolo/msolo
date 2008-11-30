@@ -57,14 +57,14 @@ class EventHistory(object):
   def get_lifetime_aggregate(self):
     return self.lifetime_collector
 
-  def get_req_avg(self):
+  def get_rate_avg(self, key):
     ec_list = []
     minute_deque = copy.copy(self.event_collector_deque)
     # remove the current minute which won't be stable
     try:
       minute_deque.pop()
       ec_list = [self.event_collector_map[minute] for minute in minute_deque]
-      return event_rate_avg(ec_list, ('wsgi.request',))['wsgi.request']
+      return event_rate_avg(ec_list, (key,))[key]
     except IndexError, e:
       return 0.0, 0.0, 0.0
 

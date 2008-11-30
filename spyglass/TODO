@@ -4,9 +4,23 @@
    * not sure if there is any benefit to putting more RRA inside one RRD
      * does reduce the total number of files per directory
      * might be cheaper to only have to update few files
+ * write the procfile atomically
+ * add sub-minute (second-wise) buckets - worth it if the request rate is high
+
+Bugs
+
+Traceback (most recent call last):
+  File "/home/youtube/svn/src/python/tools/appspy_gmetric", line 81, in ?
+    summary_rate_map = client.get_summary(aggregate_key_pattern_list)
+  File "/usr/local/encap/spyglass-0.6.2/lib/python2.4/site-packages/spyglass/client.py", line 29, in get_summary
+    return self._send_recv(MSG_TYPE_GET_SUMMARY, aggregate_key_pattern_list)
+  File "/usr/local/encap/spyglass-0.6.2/lib/python2.4/site-packages/spyglass/spudp.py", line 121, in _send_recv
+    raise SPUDPException(msg_data)
+spyglass.spudp.SPUDPException: dictionary changed size during iteration
+
+
+Past Decisions
  * what is the best way to do the proc file? could a fifo be made to act as a
    notification?
    * have a separate thread blocked on os.open('spyglass.proc', os.O_RDONLY)
-   * build it all into the http handler and rely on curl?
- * write the procfile atomically
- * make spyglass rotate its primary log
+   - build it all into the http handler and rely on curl

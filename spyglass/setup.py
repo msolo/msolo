@@ -18,4 +18,6 @@ setup(
                "Topic :: Software Development :: Libraries :: Python Modules"],
   packages=["spyglass"],
   ext_package='spyglass',
-  ) 
+  scripts=["scripts/spyglassd",
+           ],
+)

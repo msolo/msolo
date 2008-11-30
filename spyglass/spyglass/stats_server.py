@@ -35,7 +35,11 @@ class StatsRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler,
   path_map = {
     '/': 'handle_default',
     '/server-stats': 'handle_server_stats',
+    '/server-rates': 'handle_server_rates',
     }
+
+  def get_data_server(self):
+    return self.server.spyglass_server
 
   def get_event_history(self):
     return self.server.spyglass_server.event_history
@@ -70,6 +74,10 @@ class StatsRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler,
     summarize = self._get_int(form, 'summarize', 0)
     response_data = '\n'.join(self.get_stats_lines(
       details, minutes, lifetime))
+    self.send_data(response_data + '\n')
+
+  def handle_server_rates(self, path, form):
+    response_data = '\n'.join(self.get_rates_lines())
     self.send_data(response_data + '\n')
 
   def _get_int(self, form, name, default):

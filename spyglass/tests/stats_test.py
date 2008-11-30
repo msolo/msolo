@@ -1,5 +1,5 @@
-import event_collector
-from event_collector import EventCollectorException
+from spyglass import event_collector
+from spyglass.event_collector import EventCollectorException
 
 sc = event_collector.EventCollector()
 sc2 = event_collector.EventCollector()
