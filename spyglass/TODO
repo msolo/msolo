@@ -1,10 +1,7 @@
- * remove items from the historical counters
-   * might need to start recording update times to track when a value is stale
  * some kind of integration with RRD to allow more data tracking
    * not sure if there is any benefit to putting more RRA inside one RRD
      * does reduce the total number of files per directory
      * might be cheaper to only have to update few files
- * write the procfile atomically
  * add sub-minute (second-wise) buckets - worth it if the request rate is high
 
 Bugs

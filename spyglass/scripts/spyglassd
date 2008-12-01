@@ -54,6 +54,12 @@ if __name__ == '__main__':
   parser.add_option("--maximum-counter-inactivity", default=3600,
                     action="store", type="int",
                     help="set the pruning frequency for stale counters")
+  parser.add_option("--max-history", default=900,
+                    action="store", type="int",
+                    help="maximum amount of event history in seconds")
+  parser.add_option("--historical-resolution", default=60,
+                    action="store", type="int",
+                    help="resolution in seconds for historical counters")
   
   parser.add_option("--no-stats-listener",
                     action="store_true",
@@ -101,7 +107,9 @@ if __name__ == '__main__':
       log_path=options.log_file,
       state_path=options.state_file,
       proc_path=options.proc_file,
-      maximum_counter_inactivity=options.maximum_counter_inactivity)
+      maximum_counter_inactivity=options.maximum_counter_inactivity,
+      max_history=options.max_history,
+      historical_resolution=options.historical_resolution)
 
     if not options.no_stats_listener:
       spyglass.stats_server.spawn_http_server_thread(

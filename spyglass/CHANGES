@@ -1,3 +1,5 @@
+0.8.1 - make the number and time duration of buckets variable.
+
 0.8 - added time_updated tracking for individual stats, making them prunable
 so key polution is self-repairing after an hour or so. make most whole-file
 writes atomic.
@@ -20,7 +22,8 @@ block the event loop when the disks on the host machine are busy. prune unused
 keys after some period of inactivity. reject unruly key patterns in the client
 and periodically revalidate entries in the rate map.
 
-0.5.1 - patch to prevent exception when you query after a restart and there are no stats
+0.5.1 - patch to prevent exception when you query after a restart and there
+are no stats
 
 0.5 - added http thread to the server process to handle stats requests
 decomped the handler code so UDP and TCP protocols can use the same routines

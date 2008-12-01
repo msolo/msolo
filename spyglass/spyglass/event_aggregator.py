@@ -14,57 +14,68 @@ import spyglass.event_collector
 # buckets are assumed to be per-minute
 # in this case, a bucket is really an EventCollector
 class EventHistory(object):
-  def __init__(self, max_size):
-    self.max_size = max_size
+  def __init__(self, max_history, bucket_interval=60):
+    # add one so we have a current bucket that's taking new events
+    # while maintaining the appropriate amount of history
+    self.max_size = int(max_history / bucket_interval) + 1
+    self.bucket_interval = bucket_interval
     self.event_collector_map = {}
     self.event_collector_deque = collections.deque()
     self.lifetime_collector = spyglass.event_collector.EventCollector()
+    self.rate_map = {}
 
-  def _add_bucket(self, minute):
+  def _timestamp_to_bucket_time(self, timestamp):
+    timestamp = int(timestamp)
+    return timestamp - (timestamp % self.bucket_interval)
+
+  def _add_bucket(self, timestamp):
+    bucket_time = self._timestamp_to_bucket_time(timestamp)
     ec = spyglass.event_collector.EventCollector()
-    self.event_collector_deque.append(minute)
-    self.event_collector_map[minute] = ec
+    self.event_collector_deque.append(bucket_time)
+    self.event_collector_map[bucket_time] = ec
     if len(self.event_collector_deque) > self.max_size:
-      removed_minute = self.event_collector_deque.popleft()
-      del self.event_collector_map[removed_minute]
+      removed_bucket_time = self.event_collector_deque.popleft()
+      del self.event_collector_map[removed_bucket_time]
     return ec
 
-  def _get_by_minute(self, minute):
+  def _get_by_timestamp(self, timestamp):
+    bucket_time = self._timestamp_to_bucket_time(timestamp)
     try:
-      return self.event_collector_map[minute]
+      return self.event_collector_map[bucket_time]
     except KeyError, e:
-      return self._add_bucket(minute)
+      return self._add_bucket(bucket_time)
 
   def merge(self, event_collector, now=None):
     if now is None:
       now = time.time()
-    minute = _time_to_minute(now)
-    ec = self._get_by_minute(minute)
+    ec = self._get_by_timestamp(now)
     ec.merge(event_collector)
     self.lifetime_collector.merge(event_collector)
 
-  # return several minutes of aggregate events
-  def get_event_aggregate(self, minutes):
+  # return several buckets of aggregate events
+  def get_event_aggregate(self, buckets):
     ec = spyglass.event_collector.EventCollector()
     # skip the newest bucket - it's in a state of inconsistency
-    minute_list = []
-    for i, minute in enumerate(reversed(self.event_collector_deque)):
-      if 1 <= i <= minutes:
-        minute_list.append(minute)
-        ec.merge(self.event_collector_map[minute])
-    return ec, minute_list
+    bucket_list = []
+    for i, bucket_time in enumerate(reversed(self.event_collector_deque)):
+      if 1 <= i <= bucket_time:
+        bucket_list.append(bucket_time)
+        ec.merge(self.event_collector_map[bucket_time])
+    return ec, bucket_list
 
   def get_lifetime_aggregate(self):
     return self.lifetime_collector
 
   def get_rate_avg(self, key):
     ec_list = []
-    minute_deque = copy.copy(self.event_collector_deque)
+    bucket_deque = copy.copy(self.event_collector_deque)
     # remove the current minute which won't be stable
     try:
       minute_deque.pop()
-      ec_list = [self.event_collector_map[minute] for minute in minute_deque]
-      return event_rate_avg(ec_list, (key,))[key]
+      ec_list = [self.event_collector_map[bucket_time]
+                 for bucket_time in bucket_deque]
+      return event_rate_avg(
+        ec_list, (key,), bucket_interval=self.bucket_interval)[key]
     except IndexError, e:
       return 0.0, 0.0, 0.0
 
@@ -73,30 +84,27 @@ class EventHistory(object):
 # @param event_collector_list - sorted list of event_collectors - the most
 # recent item time-wise should be the last item in the list
 # @param keys - a list of keys that we are interested in - None is 'all'
-def event_rate_avg(event_collector_list, keys=None):
-  ec_1m = spyglass.event_collector.EventCollector()
-  ec_5m = spyglass.event_collector.EventCollector()
-  ec_15m = spyglass.event_collector.EventCollector()
+def event_rate_avg(event_collector_list, keys=None,
+                   time_list=(1*60,5*60,15*60),
+                   bucket_interval=60):
+  ec_list = [spyglass.event_collector.EventCollector() for x in time_list]
   # fixme: a waste if you are only picking out one key
+  bucket_list = [(x / bucket_interval) for x in time_list]  
+  ec_bucket_list = zip(ec_list, bucket_list)
+  max_bucket = max(bucket_list)
   for i, event_collector in enumerate(reversed(event_collector_list)):
-    if i < 1:
-      ec_1m = event_collector
-    # fixme: wasted merge work here
-    if i < 5:
-      ec_5m.merge(event_collector)
-    if i < 15:
-      ec_15m.merge(event_collector)
-    else:
+    if i >= max_bucket:
       break
+    for ec, bucket in ec_bucket_list:
+      if i < bucket:
+        ec.merge(event_collector)
 
   rate_map = {}
   for key in keys:
     rate_list = []
-    for counter_map, time_window in ((ec_1m.counter_map, 60.0),
-                     (ec_5m.counter_map, 60.0 * 5),
-                     (ec_15m.counter_map, 60.0 * 15)):
+    for ec, time_window in zip(ec_list, time_list):
       try:
-        avg = counter_map[key] / time_window
+        avg = ec.counter_map[key] / float(time_window)
       except KeyError:
         avg = 0.0
       rate_list.append(avg)
@@ -139,8 +147,4 @@ def request_avg(stats_bucket_deque):
     req_avg_15m = 0.0
 
   return req_avg_1m, req_avg_5m, req_avg_15m
-
-def _time_to_minute(now):
-  now = int(now)
-  return now - (now % 60)
 

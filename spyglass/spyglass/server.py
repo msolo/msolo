@@ -54,7 +54,7 @@ class RateMap(dict):
       if (counter.counters[0].last_update < expiration_time or
           not is_valid_key(key)):
         del self[key]
-  
+ 
   # condense the execution data into a statistical distribution
   def get_log_lines(self, now=None, show_all_values=False):
     lines = []
@@ -103,12 +103,14 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
   # considered stale and prunable
   def __init__(self, server_address, RequestHandlerClass, log_path=None,
       state_path=None, proc_path=None, enable_deferred_io=True,
-      maximum_counter_inactivity=3600):
+      maximum_counter_inactivity=3600, max_history=900,
+      historical_resolution=60):
     spyglass.spudp.SPUDPServer.__init__(
       self, server_address, RequestHandlerClass)
     self.event_collector = spyglass.event_collector.EventCollector()
     self.rate_map = RateMap()
-    self.event_history = spyglass.event_aggregator.EventHistory(16)
+    self.event_history = spyglass.event_aggregator.EventHistory(
+      max_history, historical_resolution)
     self._state_path = state_path
     self._proc_path = proc_path
     self._restore_state()
@@ -184,7 +186,7 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
     if self.enable_deferred_io:
       self.dio_manager.async_write_file(self._state_path, fdata)
     else:
-      self.dio_manager.sync_write_file(self._state_path, fdata)
+      spyglass.deferred_io.sync_write_file(self._state_path, fdata)
   
   def _restore_state(self):
     if not self._state_path:
@@ -225,7 +227,7 @@ class SpyglassServer(spyglass.spudp.SPUDPServer):
     if self.enable_deferred_io:
       self.dio_manager.async_write_file(self._proc_path, data)
     else:
-      self.dio_manager.sync_write_file(self._proc_path, data)
+      spyglass.deferred_io.sync_write_file(self._proc_path, data)
   
 
 signal_list = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGALRM)

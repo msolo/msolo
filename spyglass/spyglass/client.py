@@ -31,8 +31,8 @@ class SpyglassClient(spyglass.spudp.SPUDPClient):
   def get_exec_summary(self, minutes):
     return self._send_recv(MSG_TYPE_GET_EXEC_SUMMARY, (minutes,))
 
-  def get_load_avg(self):
-    return self._send_recv(MSG_TYPE_GET_LOAD_AVERAGE)
+  def get_load_avg(self, **kargs):
+    return self._send_recv(MSG_TYPE_GET_LOAD_AVERAGE, (kargs,))
 
   def get_stats(self, details=1, lifetime=False, minutes=1):
     kargs = {'details': details,

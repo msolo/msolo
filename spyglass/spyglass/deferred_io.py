@@ -7,6 +7,7 @@ from Queue import Queue, Full
 from threading import Thread
 
 import logging
+import os
 import time
 
 
@@ -29,10 +30,12 @@ class StopQueueItem(object):
     self.thread_name = thread_name
 
 
+default_buffer_size = 1024 * 1024
+
 class DeferredIOManager(object):
-  buffer_size = 1024 * 1024
   
   def __init__(self, qsize=10, iothreads=1, logger=None):
+    self.buffer_size = default_buffer_size
     self.job_queue = Queue(qsize)
     self.completion_queue = Queue(qsize)
     if logger is None:
@@ -73,14 +76,16 @@ class DeferredIOManager(object):
   async_write_file = write_file
 
   def _write_file(self, filename, data, atomic=True):
-    if atomic:
-      tmp_path = filename + '.tmp'
-    else:
-      tmp_path = filename
-    f = open(tmp_path, 'w', self.buffer_size)
-    f.write(data)
-    f.close()
-    if atomic:
-      os.rename(tmp_path, filename)
+    sync_write_file(filename, data, atomic, self.buffer_size)
 
-  sync_write_file = _write_file
+def sync_write_file(filename, data, atomic=True,
+                    buffer_size=default_buffer_size):
+  if atomic:
+    tmp_path = filename + '.tmp'
+  else:
+    tmp_path = filename
+  f = open(tmp_path, 'w', buffer_size)
+  f.write(data)
+  f.close()
+  if atomic:
+    os.rename(tmp_path, filename)
