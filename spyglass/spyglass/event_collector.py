@@ -35,8 +35,14 @@ class CounterMap(dict):
     self[key] = (value, time_updated)
       
   def merge(self, counter_map):
-    for key, (value, time_updated) in counter_map.iteritems():
-      self.increment(key, value, time_updated)
+    items = counter_map.iteritems()
+    # FIXME: what's going on here? worth catching and logging?
+    try:
+      for key, (value, time_updated) in items:
+        self.increment(key, value, time_updated)
+      except TypeError:
+        print "items", items
+        raise
 
   def get_log_lines(self, concise=False):
     if concise:
@@ -53,6 +59,12 @@ class CounterMap(dict):
           not is_valid_key(key)):
         del self[key]
 
+  def get(self, key, default=None):
+    #print "get", key, default
+    try:
+      return self[key][0]
+    except KeyError:
+      return default
 
 # this is a map of countermaps
 class ExecTimeMap(dict):
@@ -79,11 +91,13 @@ class ExecTimeMap(dict):
     self[key] = (cm, time_updated)
 
   def merge(self, exec_time_map):
-    for key, counter_map in exec_time_map.iteritems():
+    for key, (counter_map, time_updated) in exec_time_map.iteritems():
       try:
-        self[key].merge(counter_map)
+        _counter_map = self[key][0]
+        _counter_map.merge(counter_map)
       except KeyError:
-        self[key] = copy.copy(counter_map)
+        _counter_map = copy.copy(counter_map)
+      self[key] = (_counter_map, time_updated)
 
   def prune(self, maximum_inactivity=3600):
     expiration_time = time.time() - maximum_inactivity
@@ -123,9 +137,9 @@ class ExecTimeMap(dict):
   # @return dictionary mapping script to min/max/avg/median/std-dev
   def get_stats_map(self):
     stats_map = {}
-    for script, counter_map in self.iteritems():
+    for script, (counter_map, time_updated) in self.iteritems():
       response_time_list = []
-      for time_ms, count in counter_map.iteritems():
+      for time_ms, (count, time_updated) in counter_map.iteritems():
         response_time_list.extend([time_ms] * count)
       stats_map[script] = compute_statistics(response_time_list)
     return stats_map
