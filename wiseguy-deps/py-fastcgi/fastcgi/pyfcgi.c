@@ -252,7 +252,7 @@ get_line(fcgi_Stream *self, long bytesrequested)
             }
         }
         Py_END_ALLOW_THREADS
-        if (done)
+	if (done || (bytesread == bytesrequested))
             break;
 
         if (bytesrequested < 0) {
