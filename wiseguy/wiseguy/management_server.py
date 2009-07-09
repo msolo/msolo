@@ -28,16 +28,16 @@ class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
     try:
       embedded_http_server.EmbeddedHTTPServer.server_bind(self)
     except socket.error, e:
-      if e[0] == errno.EADDRINUSE:
+      if e[0] == errno.EADDRINUSE and self.fd_server:
         log.info('requesting bound fd %s', self.server_address)
         fd_client = fd_server.FdClient(self.fd_server.server_address)
         fd = fd_client.get_fd_for_address(self.server_address)
         self.socket = socket.fromfd(fd, socket.AF_INET, socket.SOCK_STREAM)
       else:
         raise
-    if self.fcgi_server._fd_server:
+    if self.fd_server:
       bound_fd = self.socket.fileno()
-      self.fcgi_server._fd_server.register_fd(bind_address, bound_fd)
+      self.fd_server.register_fd(bind_address, bound_fd)
       logging.info('registered fd %s %s', bind_address, bound_fd)
 
   

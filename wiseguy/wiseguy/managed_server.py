@@ -75,7 +75,6 @@ class ManagedServer(object):
       # you don't want to start listening until everything else is up and
       # running, lest you have a race condition when there is a fast sequence
       # of restarts
-      logging.error('fd_server start')
       self._fd_server = fd_server.FdServer(
         self._fd_server_address, fd_server.FdRequestHandler,
         bind_and_activate=False)
@@ -90,13 +89,14 @@ class ManagedServer(object):
       self.start_management_server()
 
   def start_management_server(
-      self,
-      server_class=management_server.ManagementServer,
-      request_class=management_server.ManagementRequestHandler,
-      management_address=None):
-    management_address = management_address or self._management_address
-    self._management_server = server_class(
-      management_address, request_class, self)
+    self, server_class=None, request_class=None, management_address=None):
+    _server_class = (server_class or self._management_server_class or
+                     management_server.ManagementServer)
+    _request_class = (request_class or
+                      management_server.ManagementRequestHandler)
+    _management_address = management_address or self._management_address
+    self._management_server = _server_class(
+      _management_address, _request_class, self)
     self._management_server.start()
 
   def start_fd_server(self):
