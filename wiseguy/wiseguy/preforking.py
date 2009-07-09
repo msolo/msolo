@@ -80,9 +80,13 @@ class PreForkingMixIn(object):
         # cleanly registering periodic tasks
 
         if self._management_address:
-            management_server = manager.create_http_server(
-                self._management_address,
-                self, self._management_server_class)
+            try:
+                management_server = manager.create_http_server(
+                    self._management_address,
+                    self, self._management_server_class)
+            except:
+                log.exception('failed to create management server')
+                management_server = None
         else:
             management_server = None
 
