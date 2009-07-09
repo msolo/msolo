@@ -1,114 +1,81 @@
 import errno
 import logging
 import os
-import re
 import socket
 import stat
-import time
-from wiseguy.managed_server import ManagedServer
+import sys
+
 from fastcgi import fcgi
+from wiseguy import fd_server
+from wiseguy import managed_server
 
-log = logging.getLogger('wsgi')
 
-class FCGIException(Exception):
+class FCGIServer(managed_server.ManagedServer):
+  @property
+  def server_address(self):
+    return self._server_address
+  
+  def server_bind(self):
+    if self._server_address:
+      if (isinstance(self._server_address, basestring) and
+          self._server_address.startswith('/')):
+        socket_type = socket.AF_UNIX
+      else:
+        socket_type = socket.AF_INET
+      try:
+        self._listen_socket = socket.socket(socket_type, socket.SOCK_STREAM)
+        if socket_type == socket.AF_INET:
+          self._listen_socket.setsockopt(
+            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._listen_socket.bind(self.server_address)
+      except socket.error, e:
+        if e[0] == errno.EADDRINUSE:
+          fd_client = fd_server.FdClient(self._fd_server.server_address)
+          fd = fd_client.get_fd_for_address(self.server_address)
+          self._listen_socket = socket.fromfd(
+            fd, socket_type, socket.SOCK_STREAM)
+        else:
+          raise
+      if self._fd_server:
+        bound_fd = self._listen_socket.fileno()
+        self._fd_server.register_fd(self._server_address, bound_fd)
+        logging.info('registered fd %s %s', self.server_address, bound_fd)
+
+  def server_activate(self):
+    if self._listen_socket:
+      self._listen_socket.listen(socket.SOMAXCONN)
+      self._listen_fd = self._listen_socket.fileno()
+
+    # for legacy reasons, we support STDIN as a valid _listen_fd
+    mode = os.fstat(self._listen_fd)[stat.ST_MODE]
+    if not stat.S_ISSOCK(mode):
+      raise managed_server.WiseguyError("no listening socket available")
+
+    # 0 is 'flags' - I hate magic parameters
+    self._fcgi_request = fcgi.Request(
+      self._listen_fd, 0, self._accept_input_timeout)
+    super(FCGIServer, self).server_activate()
+
+  def get_request(self):
+    # this is a little janky, the object upon which we call accept() is actually
+    # used as a request. very fun for multithreading. for now, just make it
+    # look like this operates like most other python servers
+    self._fcgi_request.accept()
+    # fixme: client_address is always None
+    return (self._fcgi_request, None)
+
+  def handle(self, req):
+    """Vaguely named, usually provided by the WSGIMix"""
+    raise NotImplementedError
+
+  def error(self, req, e):
+    """Vaguely named, usually provided by the WSGIMix"""
+    raise NotImplementedError
+
+  def handle_error(self, request, client_address):
+    self.error(request, sys.exc_info()[2])
+
+  def close_request(self, req):
+    """Implemented to make ManagedServer more consistent."""
     pass
-
-class FCGIServer(ManagedServer):
-    
-    # @param server_address - a (host, port) tuple or string - if this is a
-    # string, assume its the path to a Unix domain socket
-    # if there is no server address, assume STDIN is a socket
-    # @param accept_input_timeout - set a timeout between the accept() call
-    # and the time we actually get data on an incoming socket, milliseconds 
-    def __init__(self, server_address=None, management_address=None,
-                 workers=5, max_requests=None,
-                 max_rss=None, profile_path=None, profile_uri=None,
-                 profile_memory=False, accept_input_timeout=0,
-                 max_etime=None, profiler_module='hotshot', **kargs):
-
-        if kargs:
-            log.warning('passing deprecated args: %s', ', '.join(kargs.keys()))
-            
-        self.init_variables(server_address, management_address,
-                            workers, max_requests,
-                            max_rss, profile_path, profile_uri,
-                            profile_memory, accept_input_timeout,
-                            max_etime, profiler_module)
-        
-        if self._server_address:
-            if (isinstance(self._server_address, basestring) and
-                self._server_address.startswith('/')):
-                socket_type = socket.AF_UNIX
-            else:
-                socket_type = socket.AF_INET
-            s = socket.socket(socket_type, socket.SOCK_STREAM)
-            if socket_type == socket.AF_INET:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(self._server_address)
-            s.listen(socket.SOMAXCONN)
-            self._listen_socket = s
-            self._listen_fd = s.fileno()
-
-        mode = os.fstat(self._listen_fd)[stat.ST_MODE]
-        if not stat.S_ISSOCK(mode):
-            raise FCGIException("no listening socket available")
-
-    def _child_request_loop(self):
-        if self._profile_memory:
-            self.init_profile_memory()
-        # 0 is 'flags' - I hate magic parameters
-        req = fcgi.Request(self._listen_fd, 0, self._accept_input_timeout)
-        # log.debug("listen_fd: %s", self._listen_fd)
-        while not self._quit:
-            try:
-                req.accept()
-                # fixme: this violates WSGI environ spec - i'm not sure it
-                # belongs here anyway
-                req.environ['wiseguy.start_time'] = time.time()
-                profiling = False
-                try:
-                    if self._should_profile_request(req):
-                        profiling = True
-                        log.debug('profile: %s',
-                                  req.environ.get('PATH_INFO', ''))
-                        self._profile.runcall(self.handle, req)
-                    else:
-                        self.handle(req)
-                except IOError, e:
-                    handle_io_error(e)
-                except Exception, e:
-                    self.error(req, e)
-                # req.environ['wiseguy.end_time'] = time.time()
-                if self._max_requests is not None:
-                    # if we are profiling a specific servlet, only count the
-                    # hits to that servlet against the request limit
-                    if self._profile_uri_regex:
-                        if profiling:
-                            self._request_count += 1
-                    else:
-                        self._request_count += 1
-                    if self._request_count >= self._max_requests:
-                        self._quit = True
-            except IOError, e:
-                handle_io_error(e)
-
-            if self._profile_memory:
-                self.handle_profile_memory(req)
-
-
-# _exception - exception causing this call
-def handle_io_error(_exception):
-    # NOTE: 'Write failed' is probably an aborted request where the
-    # FastCGI client has closed the connection before we started
-    # sending data. It would be nicer if this were its own subclass
-    # but what can you do
-    error = _exception[0]
-    if error in (errno.EINTR, errno.EAGAIN, 'Write failed', 'Flush failed'):
-        #log.debug("request failed: %s", _exception)
-        pass
-    elif error == errno.ETIMEDOUT:
-        log.info('request timed out')
-    else:
-        # an unknown error at this point is probably not good, let the
-        # exception kill this child process
-        raise _exception
+  

@@ -1,3 +1,9 @@
+0.6 - extensive refactoring to support http and fcgi protocols.
+added support for file descriptor passing and high availability.
+refactored the embedded management server to use threads instead of the
+nasty alarm-based loop.
+added handlers for init_child/exit_child to better hook in fork-sensitive code.
+
 0.5.10 - make sure the management server code doesn't orphan the pre-spawned
 child processes.
 
