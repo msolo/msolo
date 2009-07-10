@@ -6,7 +6,11 @@ from wsgiref import handlers
 from wsgiref import simple_server
 
 import wiseguy
-from wiseguy import fd_server
+try:
+  from wiseguy import fd_server
+except ImportError:
+  # fd_server is python2.6 only
+  fd_server = None
 from wiseguy import managed_server
 from wiseguy import preforking
 

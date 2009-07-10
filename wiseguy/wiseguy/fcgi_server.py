@@ -6,7 +6,11 @@ import stat
 import sys
 
 from fastcgi import fcgi
-from wiseguy import fd_server
+try:
+  from wiseguy import fd_server
+except ImportError:
+  # fd_server is python2.6 only
+  fd_server = None
 from wiseguy import managed_server
 
 
@@ -29,7 +33,7 @@ class FCGIServer(managed_server.ManagedServer):
             socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._listen_socket.bind(self.server_address)
       except socket.error, e:
-        if e[0] == errno.EADDRINUSE:
+        if e[0] == errno.EADDRINUSE and self._fd_server:
           fd_client = fd_server.FdClient(self._fd_server.server_address)
           fd = fd_client.get_fd_for_address(self.server_address)
           self._listen_socket = socket.fromfd(

@@ -8,7 +8,11 @@ import logging
 import socket
 
 from wiseguy import embedded_http_server
-from wiseguy import fd_server
+try:
+  from wiseguy import fd_server
+except ImportError:
+  # fd_server is python2.6 only
+  fd_server = None
 
 log = logging.getLogger('wsgi.mgmt_server')
 
