@@ -36,6 +36,7 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
       if e[0] == errno.EADDRINUSE:
         fd_client = fd_server.FdClient(self._fd_server.server_address)
         fd = fd_client.get_fd_for_address(self.server_address)
+        self._previous_pid = fd_client.get_pid()
         # reassign the socket for the SocketServer
         # fixme: does it make more sense to do this as a rebindable socket
         # rather than at the server level?

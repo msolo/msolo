@@ -36,6 +36,8 @@ class FCGIServer(managed_server.ManagedServer):
         if e[0] == errno.EADDRINUSE and self._fd_server:
           fd_client = fd_server.FdClient(self._fd_server.server_address)
           fd = fd_client.get_fd_for_address(self.server_address)
+          self._previous_pid = fd_client.get_pid()
+          logging.info('previous pid %s', self._previous_pid)
           self._listen_socket = socket.fromfd(
             fd, socket_type, socket.SOCK_STREAM)
         else:
@@ -47,6 +49,8 @@ class FCGIServer(managed_server.ManagedServer):
 
   def server_activate(self):
     if self._listen_socket:
+      # NOTE: does listening with too much backlog break FIFO queuing? does this mean
+      # a slow worker will make some requests wait unfairly?
       self._listen_socket.listen(socket.SOMAXCONN)
       self._listen_fd = self._listen_socket.fileno()
 

@@ -52,8 +52,9 @@ class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):
     '/server-profile': 'handle_server_profile',
     '/server-profile-data': 'handle_server_last_profile_data',
     '/server-profile-memory': 'handle_profile_memory',
-    '/server-suspend-spawning': 'handle_suspend_spawning',
+    '/server-prune-worker': 'handle_prune_worker',
     '/server-resume-spawning': 'handle_resume_spawning',
+    '/server-suspend-spawning': 'handle_suspend_spawning',
     '/server-set-max-rss': 'handle_set_max_rss',
     })
   
@@ -80,7 +81,11 @@ class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):
     force = self._get_int('force', False)
     self.server.fcgi_server.handle_server_cycle(skew, workers, force)
     return 'cycled.\n'
-    
+
+  def handle_prune_worker(self):
+    self.server.fcgi_server.handle_server_prune_worker()
+    return 'pruned.\n'
+
   def handle_server_profile(self):
     profile_path = self._get_str('profile_path', '/tmp')
     profile_uri = self._get_str('profile_uri', None)

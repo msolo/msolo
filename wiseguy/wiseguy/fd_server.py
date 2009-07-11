@@ -6,65 +6,37 @@ import _multiprocessing
 import os
 import socket
 import SocketServer
-import struct
-import threading
 import time
 
-
-INT_FORMAT = '!I'
-INT_SIZE = struct.calcsize(INT_FORMAT)
+from wiseguy import embedded_sock_server
 
 
-class FdClientError(Exception):
+class FdClientError(embedded_sock_server.ClientError):
   pass
 
 
-class _FdChatter(object):
-  def send_int(self, i):
-    self.sock.sendall(struct.pack(INT_FORMAT, i))
-
-  def recv_int(self):
-    return int(struct.unpack(INT_FORMAT, self.sock.recv(INT_SIZE))[0])
-
-  def send_str(self, s):
-    self.send_int(len(s))
-    try:
-      self.sock.sendall(s)
-    except TypeError, e:
-      logging.exception('send_str: %r', s)
-      raise
-
-  def recv_str(self):
-    strlen = self.recv_int()
-    return self.sock.recv(strlen)
-
-
-class FdClient(_FdChatter):
-  def __init__(self, address):
-    self.sock = None
-    self.socket_address = address
-
+class FdClient(embedded_sock_server.SocketClient):
   def get_fd_for_address(self, bind_address):
-    self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    self.sock.connect(self.socket_address)
+    self.send_str('REQ_FD')
     self.send_str(bind_string(bind_address))
     response = self.recv_str()
     if response == 'OK':
-      return _multiprocessing.recvfd(self.sock.fileno())
+      return _multiprocessing.recvfd(self.socket.fileno())
     elif response == 'ERROR':
       raise FdClientError(self.recv_str())
     else:
       raise FdClientError('bad response: %r' % response)
 
+  def get_pid(self):
+    self.send_str('REQ_PID')
+    response = self.recv_str()
+    if response == 'OK':
+      return self.recv_int()
+    raise FdClientError('bad response: %r' % response)
 
-#class FdRequestHandler(_FdChatter, SocketServer.BaseRequestHandler):
-class FdRequestHandler(SocketServer.BaseRequestHandler, _FdChatter):
-  @property
-  def sock(self):
-    return self.request
-  
-  # FIXME: these methods might need timeouts
-  def handle(self):
+
+class FdRequestHandler(embedded_sock_server.EmbeddedHandler):
+  def handle_REQ_FD(self):
     bind_address = self.recv_str()
     if bind_address in self.server.fd_map:
       bound_fd = self.server.fd_map[bind_address]
@@ -76,33 +48,35 @@ class FdRequestHandler(SocketServer.BaseRequestHandler, _FdChatter):
       self.send_str('ERROR')
       self.send_str('No fd matching %r' % bind_address)
 
+  def handle_REQ_PID(self):
+    self.send_str('OK')
+    self.send_int(os.getpid())
 
-class RebindingServer(object):
-  """An abstract class specifying necessary overrides for rebinding a server.
-  """
-  fd_server = None
 
-class FdServer(SocketServer.UnixStreamServer):
+class FdServer(embedded_sock_server.EmbeddedSockServer):
   """Handle requests for file descriptors.
 
   The basic protocol is netstring like so we can chat but periodically call
   out to do the sendfd/recvfd referencing the same socket we are listening on.
 
   CLIENT:
+    send_str REQ_FD
     send_str (bind address)
     recv_str OK -> recvfd
              ERROR -> recv_str (error message)
 
   SERVER:
     accept()
-    recv_str (bind address)
-    send_str OK -> sendfd
-             ERROR -> send_str (error message)
+    recv_str REQ_FD
+             recv_str (bind address)
+             send_str OK -> sendfd
+                      ERROR -> send_str (error message)
   """
 
   # map bind args to a socket object (maybe just an fd?)
   fd_map = {}
-  _thread = None
+  thread_name = 'fd_server'
+
   _bound = False
 
     
@@ -135,14 +109,8 @@ class FdServer(SocketServer.UnixStreamServer):
     if not self._bound:
       self.server_bind()
       self.server_activate()
-    self._thread = threading.Thread(
-      target=self.serve_forever, name='fd_server')
-    self._thread.setDaemon(True)
-    self._thread.start()
+    embedded_sock_server.EmbeddedSockServer.start(self)
 
-  def stop(self):
-    self.shutdown()
-    self._thread.join()
 
 def bind_string(bind_address):
   if isinstance(bind_address, basestring):
@@ -150,6 +118,7 @@ def bind_string(bind_address):
   else:
     # assume it's a tuple of (ip, port)
     return '%s:%s' % bind_address
+
 
 if __name__ == '__main__':
   logging.basicConfig(level=logging.INFO)

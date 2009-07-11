@@ -7,6 +7,7 @@ import signal
 import time
 import sys
 
+from wiseguy import micro_management_server
 from wiseguy import resource_manager
 
 log = logging.getLogger('wsgi')
@@ -144,8 +145,9 @@ class PreForkingMixIn(object):
   # restarts
   # workers - new number of worker processes
   # NOTE: THREADED this executes in another thread. there are shared variables
-  # that get modified, but this shouldn't cause a problem since we mostly operate
-  # on a consistent copy. the server as a whole should trend towards consistency.
+  # that get modified, but this shouldn't cause a problem since we mostly
+  # operate on a consistent copy. the server as a whole should trend towards
+  # consistency.
   def handle_server_cycle(self, skew=0, workers=None, force=False):
     if workers is not None and not 1 <= workers <= 64:
       raise ValueError('unsane worker count: %s', workers)
@@ -164,6 +166,29 @@ class PreForkingMixIn(object):
         os.kill(pid, signal.SIGTERM)
       if skew:
         time.sleep(skew)
+
+  # NOTE: THREADED this executes in another thread. there are shared variables
+  # that get modified, but this shouldn't cause a problem since we mostly
+  # operate on a consistent copy. the server as a whole should trend towards
+  # consistency.
+  def handle_server_prune_worker(self):
+    if self._workers:
+      self._workers -= 1
+      pid = self._child_pids.pop()
+      os.kill(pid, signal.SIGTERM)
+
+  # NOTE: THREADED this executes in another thread. there are shared variables
+  # that get modified, but this shouldn't cause a problem since we mostly
+  # operate on a consistent copy. the server as a whole should trend towards
+  # consistency.
+  def handle_server_graceful_shutdown(self):
+    """Keep removing workers until there aren't any.
+
+    Each worker should terminate gracefully, as should the parent."""
+    while self._workers:
+      self._workers -= 1
+      pid = self._child_pids.pop()
+      os.kill(pid, signal.SIGTERM)
 
   # FIXME: this is kind of dopey the way we have to send back an http-like
   # response. should this be only in the management_server?
@@ -271,9 +296,27 @@ class PreForkingMixIn(object):
         self._handle_io_error(e)
 
   def serve_forever(self):
+    if self._fd_server and self._previous_pid:
+      uclient = micro_management_server.MicroManagementClient(
+        '%s-%s' % (self._fd_server.server_address, self._previous_pid))
+    else:
+      uclient = None
+
     while len(self._child_pids) < self._workers:
+      # fixme: want to send prune-one-worker here, but realistically, we need
+      # to make sure that we are prunning from the old instance wich might be
+      # difficult if we have already cloned and bound our mgmt server
+      logging.debug('serve_forever %s %s', self._workers, uclient)
+      if uclient:
+        uclient.prune_worker()
       self.spawn_child()
 
+    if uclient:
+      try:
+        uclient.graceful_shutdown()
+      except Exception, e:
+        log.warning('graceful_shutdown failed: %s', e)
+      
     self.install_parent_signals()
     try:
       self.manage_children()

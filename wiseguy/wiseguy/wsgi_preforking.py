@@ -15,7 +15,7 @@ class PreForkingFCGIWSGIServer(WSGIMixIn, PreForkingMixIn, FCGIServer):
     self._app = app
 
   def get_app(self):
-    return _app
+    return self._app
 
   def set_app(self, app):
     self._app = app

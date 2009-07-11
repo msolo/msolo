@@ -3,7 +3,6 @@ import logging
 import os
 import signal
 import socket
-import time
 
 try:
   from wiseguy import fd_server
@@ -12,6 +11,7 @@ except ImportError:
   fd_server = None
   
 from wiseguy import management_server
+from wiseguy import micro_management_server
 
 log = logging.getLogger('wsgi')
 
@@ -69,6 +69,8 @@ class ManagedServer(object):
     self._allow_spawning = True
 
     self._management_server = None
+    # the pid of the currently running managed server, if there is one
+    self._previous_pid = None
 
     if fd_server and self._fd_server_address:
       # create the instance, but don't start it up just yet
@@ -78,8 +80,11 @@ class ManagedServer(object):
       self._fd_server = fd_server.FdServer(
         self._fd_server_address, fd_server.FdRequestHandler,
         bind_and_activate=False)
+      self._micro_management_server = micro_management_server.MicroManagementServer(
+        '%s-%s' % (self._fd_server_address, os.getpid()), self)
     else:
       self._fd_server = None
+      self._micro_management_server = None
 
     if bind_and_activate:
       self.server_bind()
@@ -103,6 +108,7 @@ class ManagedServer(object):
     if self._fd_server:
       logging.debug('start_fd_server')
       self._fd_server.start()
+      self._micro_management_server.start()
     
   def server_bind(self):
     raise NotImplementedError
@@ -333,4 +339,3 @@ def _register_function(function_list, function, pargs, kargs):
   if function_spec in function_list:
     raise WiseguyError("can't register duplicate function: %s", function_spec)
   function_list.append(function_spec)
-

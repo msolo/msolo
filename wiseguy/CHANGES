@@ -3,6 +3,8 @@ added support for file descriptor passing and high availability.
 refactored the embedded management server to use threads instead of the
 nasty alarm-based loop.
 added handlers for init_child/exit_child to better hook in fork-sensitive code.
+added a small per-instance unix socket server that allows for reliable control
+over the master process.
 
 0.5.10 - make sure the management server code doesn't orphan the pre-spawned
 child processes.
