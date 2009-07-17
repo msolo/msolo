@@ -91,7 +91,7 @@ class PreForkingMixIn(object):
         try:
           rss = resource_manager.get_memory_usage(pid)['VmRSS']
         except resource_manager.MemoryException, e:
-          log.exception('resource manager error pid: %s', pid)
+          log.warning('resource manager error pid: %s %s', pid, e)
           continue
         if rss > self._max_rss:
           log.info('kill child pid: %s, rss: %s', pid, rss)
