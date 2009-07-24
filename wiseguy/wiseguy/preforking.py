@@ -86,7 +86,7 @@ class PreForkingMixIn(object):
     # FIXME: might want to fork off this new children first, presuming
     # there are resources to do so, then kill the unruly children. this
     # might result in smoother response times
-    if self._max_rss and self._allow_spawning:
+    if not self._quit and self._max_rss and self._allow_spawning:
       for pid in self._child_pids:
         try:
           rss = resource_manager.get_memory_usage(pid)['VmRSS']
@@ -303,10 +303,7 @@ class PreForkingMixIn(object):
       uclient = None
 
     while len(self._child_pids) < self._workers:
-      # fixme: want to send prune-one-worker here, but realistically, we need
-      # to make sure that we are prunning from the old instance wich might be
-      # difficult if we have already cloned and bound our mgmt server
-      logging.debug('serve_forever %s %s', self._workers, uclient)
+      logging.debug('serve_forever - spawn %s/%s %s', len(self._child_pids)+1, self._workers, uclient)
       if uclient:
         uclient.prune_worker()
       self.spawn_child()

@@ -5,8 +5,10 @@ a binary protocol at the moment, but that might be annoying for debugging in
 the longer term.
 """
 
+import errno
 import logging
 import os
+import select
 import socket
 import SocketServer
 import struct
@@ -96,3 +98,21 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
         os.remove(self.server_address)
       except EnvironmentError, e:
         logging.error('error removing %s', self.server_address)
+
+  def serve_forever(self, poll_interval=0.5):
+    self._BaseServer__serving = True
+    self._BaseServer__is_shut_down.clear()
+    while self._BaseServer__serving:
+      try:
+        r, w, e = select.select([self], [], [], poll_interval)
+      except select.error, e:
+        # a call to setuid() can cause your threads to receive an untrappable
+        # signal, SIGRT_1 (at least on Linux)
+        # fixme: this should probably go to the std library
+        if e[0] == errno.EINTR:
+          continue
+        else:
+          raise
+      if r:
+        self._handle_request_noblock()
+    self._BaseServer__is_shut_down.set()

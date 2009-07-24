@@ -1,7 +1,9 @@
 import BaseHTTPServer
 import cgi
+import errno
 import httplib
 import logging
+import select
 import threading
 import urllib
 import urlparse
@@ -37,7 +39,16 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
     try:
       # fixme: not needed in python2.6
       while not self._quit:
-        self.handle_request()
+        try:
+          self.handle_request()
+        except select.error, e:
+          # a call to setuid() can cause your threads to receive an untrappable
+          # signal, SIGRT_1 (at least on Linux)
+          # fixme: this should probably go to the std library
+          if e[0] == errno.EINTR:
+            pass
+          else:
+            raise
     except KeyboardInterrupt:
       pass
 
