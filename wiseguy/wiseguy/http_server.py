@@ -65,7 +65,11 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
     managed_server.ManagedServer.close_request(self, request)
     
 
-class WiseguyWSGIHandler(handlers.SimpleHandler):
+class WiseguyWSGIHandler(simple_server.ServerHandler):
+  """This class controls the dispatch to the WSGI application itself.
+
+  It's *very* confusing, but this class actually controls the logging
+  for dynamic requests in the close method."""
   server_software = 'wiseguy/%s' % wiseguy.__version__
 
   @property
