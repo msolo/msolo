@@ -1,6 +1,7 @@
 import errno
 import logging
 import socket
+import time
 
 from wsgiref import handlers
 from wsgiref import simple_server
@@ -70,16 +71,82 @@ class WiseguyWSGIHandler(simple_server.ServerHandler):
 
   It's *very* confusing, but this class actually controls the logging
   for dynamic requests in the close method."""
+
   server_software = 'wiseguy/%s' % wiseguy.__version__
 
   @property
   def http_version(self):
     return self.request_handler.http_version
+  
+  def cleanup_headers(self):
+    # NOTE: make sure you communicate to the client that you will close the
+    # underlying connection
+    if self.request_handler.close_connection:
+      self.headers['Connection'] = 'close'
 
+  def finish_response(self):
+    start = time.time()
+    try:
+      if not self.result_is_file() or not self.sendfile():
+        for data in self.result:
+          # you may need to iterate over self.result to force the content
+          # generation, but if you are a head request, don't send anything
+          if self.request_handler.command != 'HEAD':
+            self.write(data)
+
+        if self.request_handler.command == 'HEAD':
+          self.write('')
+        self.finish_content()
+      self.close()
+    except:
+      elapsed = time.time() - start
+      logging.exception('http_server.finish_response "%s" %s %s',
+                        self.requestline, self.headers, elapsed)
+      raise
+
+
+class SocketFileWrapper(object):
+  """A simple wrapper to keep track of the bytes read.
+
+  This is not complete and may break, but it is complete enough for our needs.
+  """
+  def __init__(self, _file):
+    self.file = _file
+    self._bytes_read = 0
+
+  def __getattr__(self, name):
+    return getattr(self.file, name)
+
+  def read(self, *args):
+    result = self.file.read(*args)
+    self._bytes_read += len(result)
+    return result
+
+  def readline(self, *args):
+    result = self.file.readline(*args)
+    self._bytes_read += len(result)
+    return result
+
+  def socket_tell(self):
+    return self._bytes_read
+   
 
 class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   # force http 1.1 protocol version
   protocol_version = 'HTTP/1.1'
+  wsgi_handler_class = WiseguyWSGIHandler
+  header_size = None
+  request_count = 0
+
+  def setup(self):
+    simple_server.WSGIRequestHandler.setup(self)
+    self.rfile = SocketFileWrapper(self.rfile)
+
+  def parse_request(self):
+    try:
+      return simple_server.WSGIRequestHandler.parse_request(self)
+    finally:
+      self.header_size = self.rfile.socket_tell()
 
   @property
   def http_version(self):
@@ -100,18 +167,39 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
       self.handle_one_request()
 
   def handle_one_request(self):
-    self.raw_requestline = self.rfile.readline()
-    if not self.parse_request(): # An error code has been sent, just exit
-      return
+    try:
+      self.raw_requestline = self.rfile.readline()
+      if not self.parse_request(): # An error code has been sent, just exit
+        return
 
-    if self.server._should_profile_request(self):
-      profiling = True
-      self.server._profile.runcall(self._run_wsgi_app)
-    else:
-      self._run_wsgi_app()
+      if self.server._should_profile_request(self):
+        profiling = True
+        self.server._profile.runcall(self._run_wsgi_app)
+      else:
+        self._run_wsgi_app()
+
+      # This deserves some explanation. If we get a malformed request, bail
+      # out early or for any other reason don't consume the inbound stream,
+      # we need to close the connection to prevent a persistent connection
+      # from getting confused. The best way to handle this is to assume we
+      # close on a POST and only keep alive when we are pretty sure we can.
+      # This check means that only urlencoded POSTs are going to stay alive,
+      # multipart forms with close every time.
+      if self.command == 'POST':
+        self.close_connection = True
+        content_length_value = self.headers.getheader('Content-Length')
+        if content_length_value is not None:
+          content_length = int(content_length_value)
+          # We consider the POST request 'safe' to keep alive when we know the
+          # size before hand and that matches exactly the amount of data we
+          # have read from the inbound stream.
+          if self.rfile.socket_tell() == (self.header_size + content_length):
+            self.close_connection = False
+    finally:
+      self.request_count += 1
 
   def _run_wsgi_app(self):
-    handler = WiseguyWSGIHandler(
+    handler = self.wsgi_handler_class(
       self.rfile, self.wfile, self.get_stderr(), self.get_environ())
     handler.request_handler = self    # backpointer for logging
     handler.run(self.server.get_app())
