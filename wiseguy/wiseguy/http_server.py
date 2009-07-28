@@ -63,8 +63,8 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
     
   def close_request(self, request):
     simple_server.WSGIServer.close_request(self, request)
-    managed_server.ManagedServer.close_request(self, request)
-    
+    managed_server.ManagedServer.close_request(self, request)    
+
 
 class WiseguyWSGIHandler(simple_server.ServerHandler):
   """This class controls the dispatch to the WSGI application itself.
@@ -73,6 +73,16 @@ class WiseguyWSGIHandler(simple_server.ServerHandler):
   for dynamic requests in the close method."""
 
   server_software = 'wiseguy/%s' % wiseguy.__version__
+
+  def log_exception(self, exc_info):
+    try:
+      elapsed = time.time() - self.start      
+      logging.exception('wsgi error %s "%s" %s',
+         elapsed, self.request_handler.raw_requestline, self.headers)
+    finally:
+      exc_info = None
+    # force the connection to get torn down
+    self.request_handler.close_connection = True
 
   @property
   def http_version(self):
@@ -85,24 +95,16 @@ class WiseguyWSGIHandler(simple_server.ServerHandler):
       self.headers['Connection'] = 'close'
 
   def finish_response(self):
-    start = time.time()
-    try:
-      if not self.result_is_file() or not self.sendfile():
-        for data in self.result:
-          # you may need to iterate over self.result to force the content
-          # generation, but if you are a head request, don't send anything
-          if self.request_handler.command != 'HEAD':
-            self.write(data)
+    self.start = time.time()
+    if not self.result_is_file() or not self.sendfile():
+      for data in self.result:
+        if self.request_handler.command != 'HEAD':
+          self.write(data)
 
-        if self.request_handler.command == 'HEAD':
-          self.write('')
-        self.finish_content()
-      self.close()
-    except:
-      elapsed = time.time() - start
-      logging.exception('http_server.finish_response "%s" %s %s',
-                        self.requestline, self.headers, elapsed)
-      raise
+      if self.request_handler.command == 'HEAD':
+        self.write('')
+      self.finish_content()
+    self.close()
 
 
 class SocketFileWrapper(object):
@@ -137,6 +139,10 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   wsgi_handler_class = WiseguyWSGIHandler
   header_size = None
   request_count = 0
+#  rbufsize = 1
+#  wbufsize = 4096
+  start_time = None
+  raw_requestline = None
 
   def setup(self):
     simple_server.WSGIRequestHandler.setup(self)
@@ -162,11 +168,17 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   def handle(self):
     # override handle() so we deal with keep-alive connections.
     # fixme: is this a bug in simple_server.WSGIRequestHandler??
-    self.handle_one_request()
-    while not self.close_connection:
+    try:
       self.handle_one_request()
+      while not self.close_connection:
+        self.handle_one_request()
+    except Exception, e:
+      elapsed = time.time() - self.start_time
+      logging.exception('http error %s %s "%s"',
+                        e, elapsed, self.raw_requestline)
 
   def handle_one_request(self):
+    self.start_time = time.time()
     try:
       self.raw_requestline = self.rfile.readline()
       if not self.parse_request(): # An error code has been sent, just exit
