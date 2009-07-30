@@ -179,7 +179,8 @@ class ManagedServer(object):
     # but what can you do
     error = _exception[0]
     if error in (errno.EINTR, errno.EAGAIN, 'Write failed', 'Flush failed'):
-      log.debug('request failed: %s', _exception)
+      #log.debug("request failed: %s", _exception)
+      pass
     elif error == errno.ETIMEDOUT:
       log.info('request timed out')
     else:

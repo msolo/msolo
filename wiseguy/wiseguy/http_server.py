@@ -1,6 +1,7 @@
 import errno
 import logging
 import socket
+import struct
 import time
 
 from wsgiref import handlers
@@ -15,6 +16,7 @@ except ImportError:
 from wiseguy import managed_server
 from wiseguy import preforking
 
+NOLINGER = struct.pack('ii', 1, 0)
 
 class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
   def __init__(self, *pargs, **kargs):
@@ -112,15 +114,24 @@ class SocketFileWrapper(object):
 
   This is not complete and may break, but it is complete enough for our needs.
   """
-  def __init__(self, _file):
+  def __init__(self, _file, request_handler):
     self.file = _file
+    self.request_handler = request_handler
     self._bytes_read = 0
 
   def __getattr__(self, name):
     return getattr(self.file, name)
 
   def read(self, *args):
-    result = self.file.read(*args)
+    if not args and self.request_handler.command == 'POST':
+      content_length = int(
+        self.request_handler.headers.getheader('Content-Length', -1))
+      if content_length < 0:
+        result = self.file.read(*args)
+      else:
+        result = self.file.read(content_length)
+    else:
+      result = self.file.read(*args)
     self._bytes_read += len(result)
     return result
 
@@ -139,19 +150,24 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   wsgi_handler_class = WiseguyWSGIHandler
   header_size = None
   request_count = 0
-#  rbufsize = 1
-#  wbufsize = 4096
   start_time = None
   raw_requestline = None
 
   def setup(self):
-    simple_server.WSGIRequestHandler.setup(self)
-    self.rfile = SocketFileWrapper(self.rfile)
+    self.connection = self.request
+    self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, 0)
+    self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, NOLINGER)
+    self.rfile = self.connection.makefile('rb', self.rbufsize)
+    self.wfile = self.connection.makefile('wb', self.wbufsize)
+    self.rfile = SocketFileWrapper(self.rfile, self)
 
   def parse_request(self):
     try:
       return simple_server.WSGIRequestHandler.parse_request(self)
     finally:
+      # save the amount of data read at this point to optimize POST
+      # keep-alive
       self.header_size = self.rfile.socket_tell()
 
   @property
@@ -175,7 +191,7 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
     except Exception, e:
       elapsed = time.time() - self.start_time
       logging.exception('http error %s %s "%s"',
-                        e, elapsed, self.raw_requestline)
+         e, elapsed, self.raw_requestline)
 
   def handle_one_request(self):
     self.start_time = time.time()
