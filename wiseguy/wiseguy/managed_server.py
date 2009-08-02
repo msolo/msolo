@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import socket
+import threading
 
 try:
   from wiseguy import fd_server
@@ -13,10 +14,10 @@ except ImportError:
 from wiseguy import management_server
 from wiseguy import micro_management_server
 
-log = logging.getLogger('wsgi')
 
 class WiseguyError(Exception):
   pass
+
 
 class ManagedServer(object):
   def __init__(self, server_address=None, management_address=None,
@@ -25,8 +26,8 @@ class ManagedServer(object):
                profile_memory=False, accept_input_timeout=0,
                profiler_module='hotshot',
                bind_and_activate=True,
-               start_management_server=True,
                fd_server_address=None,
+               drop_privileges_callback=None,
                **kargs):
     """Construct the manager for a particular server instance.
     server_address - a (host, port) tuple or string
@@ -36,7 +37,7 @@ class ManagedServer(object):
       and the time we get data on an incoming socket, milliseconds 
     """
     if kargs:
-      log.warning('passing deprecated args: %s', ', '.join(kargs.keys()))
+      logging.warning('passing deprecated args: %s', ', '.join(kargs.keys()))
       
     self._workers = workers
     self._server_address = server_address
@@ -65,12 +66,16 @@ class ManagedServer(object):
     self._profiler_module = profiler_module
     self._init_functions = []
     self._exit_functions = []
+    self._drop_privileges_callback = drop_privileges_callback
     # should we allow the a new process to fork?
     self._allow_spawning = True
 
     self._management_server = None
     # the pid of the currently running managed server, if there is one
     self._previous_pid = None
+    # sometimes multiple threads (management servers) might need to cleanly
+    # modify the internal state of the running server.
+    self._lock = threading.RLock()
 
     if fd_server and self._fd_server_address:
       # create the instance, but don't start it up just yet
@@ -81,17 +86,29 @@ class ManagedServer(object):
         self._fd_server_address, fd_server.FdRequestHandler,
         bind_and_activate=False)
       self._micro_management_server = micro_management_server.MicroManagementServer(
-        '%s-%s' % (self._fd_server_address, os.getpid()), self)
+        '%s-%s' % (self._fd_server_address, os.getpid()), self,
+        bind_and_activate=False)
     else:
       self._fd_server = None
       self._micro_management_server = None
+
+    if self._management_address:
+      self.start_management_server()
 
     if bind_and_activate:
       self.server_bind()
       self.server_activate()
 
-    if start_management_server and self._management_address:
-      self.start_management_server()
+
+  @property
+  def child_pids(self):
+    """Return an immutable, consistent copy of the current child pids."""
+    self._lock.acquire()
+    try:
+      return tuple(self._child_pids)
+    finally:
+      self._lock.release()
+  
 
   def start_management_server(
     self, server_class=None, request_class=None, management_address=None):
@@ -108,6 +125,7 @@ class ManagedServer(object):
     if self._fd_server:
       logging.debug('start_fd_server')
       self._fd_server.start()
+      logging.debug('start_micro_management_server')
       self._micro_management_server.start()
     
   def server_bind(self):
@@ -131,7 +149,7 @@ class ManagedServer(object):
         func(*targs, **kargs)
       except:
         # log in case other application logging is not yet initialized
-        log.exception('exception during init function')
+        logging.exception('exception during init function')
         raise
     
   def _run_exit_functions(self):
@@ -142,9 +160,9 @@ class ManagedServer(object):
       try:
         func(*targs, **kargs)
       except SystemExit:
-        log.exception('SystemExit raised during exit function')
+        logging.exception('SystemExit raised during exit function')
       except:
-        log.exception('exception during exit function')
+        logging.exception('exception during exit function')
 
   def serve_forever(self):
     """Override me"""
@@ -179,10 +197,9 @@ class ManagedServer(object):
     # but what can you do
     error = _exception[0]
     if error in (errno.EINTR, errno.EAGAIN, 'Write failed', 'Flush failed'):
-      #log.debug("request failed: %s", _exception)
-      pass
+      logging.debug("request failed: %s", _exception)
     elif error == errno.ETIMEDOUT:
-      log.info('request timed out')
+      logging.info('request timed out')
     else:
       # an unknown error at this point is probably not good, let the
       # exception kill this child process
@@ -196,7 +213,7 @@ class ManagedServer(object):
     try:
       if self._should_profile_request(request):
         self._profiling = True
-        log.debug('profile: %s', request.environ.get('PATH_INFO', ''))
+        logging.debug('profile: %s', request.environ.get('PATH_INFO', ''))
         self._profile.runcall(self.finish_request, request, client_address)
       else:
         self.finish_request(request, client_address)
@@ -277,7 +294,7 @@ class ManagedServer(object):
     try:
       self._mem_stats = get_memory_usage(os.getpid())
     except MemoryException, e:
-      log.warning('failed init_profile_memory: %s', str(e))
+      logging.warning('failed init_profile_memory: %s', str(e))
     
   def handle_profile_memory(self, req):
     # fixme: ugly hack to handle cyclic dependency
@@ -285,7 +302,7 @@ class ManagedServer(object):
     try:
       current_mem_stats = get_memory_usage(os.getpid())
     except MemoryException, e:
-      log.warning('failed handle_profile_memory: %s', str(e))
+      logging.warning('failed handle_profile_memory: %s', str(e))
       return
     
     mem_delta = compute_memory_delta(self._mem_stats,
@@ -301,7 +318,7 @@ class ManagedServer(object):
       delta = ('VmSize:%(VmSize)s VmData:%(VmData)s VmRSS:%(VmRSS)s'
                % mem_delta)
       current = 'CurRSS:%(VmRSS)s' % current_mem_stats
-      log.info('profile_memory %s %s %s', current, delta, request_uri)
+      logging.info('profile_memory %s %s %s', current, delta, request_uri)
       
   def _should_profile_request(self, req):
     # this a little fugly
@@ -326,7 +343,7 @@ class ManagedServer(object):
                bias, profiler_module)
       os.kill(pid, signal.SIGTERM)
     except:
-      log.exception("handle_server_profile")
+      logging.exception("handle_server_profile")
 
 
 def compute_memory_delta(mem_stats1, mem_stats2):

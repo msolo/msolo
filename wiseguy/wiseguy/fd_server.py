@@ -16,6 +16,18 @@ class FdClientError(embedded_sock_server.ClientError):
 
 
 class FdClient(embedded_sock_server.SocketClient):
+  @embedded_sock_server.disconnect_on_completion
+  def get_available_addresses(self):
+    self.send_str('REQ_ADDRS')
+    response = self.recv_str()
+    if response == 'OK':
+      return self.recv_str()
+    elif response == 'ERROR':
+      raise FdClientError(self.recv_str())
+    else:
+      raise FdClientError('bad response: %r' % response)
+
+  @embedded_sock_server.disconnect_on_completion
   def get_fd_for_address(self, bind_address):
     self.send_str('REQ_FD')
     self.send_str(bind_string(bind_address))
@@ -27,6 +39,7 @@ class FdClient(embedded_sock_server.SocketClient):
     else:
       raise FdClientError('bad response: %r' % response)
 
+  @embedded_sock_server.disconnect_on_completion
   def get_pid(self):
     self.send_str('REQ_PID')
     response = self.recv_str()
@@ -38,19 +51,26 @@ class FdClient(embedded_sock_server.SocketClient):
 class FdRequestHandler(embedded_sock_server.EmbeddedHandler):
   def handle_REQ_FD(self):
     bind_address = self.recv_str()
+    logging.info('request fd: %s', bind_address)
     if bind_address in self.server.fd_map:
       bound_fd = self.server.fd_map[bind_address]
-      logging.info('request fd: %s %s', bind_address, bound_fd)
+      logging.info('sending fd: %s %s', bind_address, bound_fd)
       self.send_str('OK')
       _multiprocessing.sendfd(self.request.fileno(), bound_fd)
     else:
-      logging.error('request fd: %s', bind_address)
+      logging.info('no match for requested fd: %s %s',
+                    bind_address, self.server.fd_map.keys())
       self.send_str('ERROR')
-      self.send_str('No fd matching %r' % bind_address)
+      self.send_str('No fd matching %r on %s %s' % (bind_address, os.getpid(),
+                    self.server.fd_map.keys()))
 
   def handle_REQ_PID(self):
     self.send_str('OK')
     self.send_int(os.getpid())
+
+  def handle_REQ_ADDRS(self):
+    self.send_str('OK')
+    self.send_str(str(self.server.fd_map.keys()))
 
 
 class FdServer(embedded_sock_server.EmbeddedSockServer):
@@ -74,14 +94,20 @@ class FdServer(embedded_sock_server.EmbeddedSockServer):
   """
 
   # map bind args to a socket object (maybe just an fd?)
-  fd_map = {}
+  fd_map = None
   thread_name = 'fd_server'
-
+  unbind_on_shutdown = False
   _bound = False
 
+  def __init__(self, *pargs, **kargs):
+    self.fd_map = {}
+    embedded_sock_server.EmbeddedSockServer.__init__(self, *pargs, **kargs)
     
   def register_fd(self, bind_address, fd):
     self.fd_map[bind_string(bind_address)] = fd
+
+  def handle_error(self, request, client_address):
+    logging.exception('error during request from %s', client_address)
 
   def server_bind(self):
     # always register yourself
@@ -104,6 +130,7 @@ class FdServer(embedded_sock_server.EmbeddedSockServer):
     self.register_fd(bind_address, bound_fd)
     logging.info('registered fd %s %s', bind_address, bound_fd)
     self._bound = True
+    logging.debug('bound %s', self)
     
   def start(self):
     if not self._bound:

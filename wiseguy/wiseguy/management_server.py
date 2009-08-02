@@ -14,8 +14,6 @@ except ImportError:
   # fd_server is python2.6 only
   fd_server = None
 
-log = logging.getLogger('wsgi.mgmt_server')
-
 
 class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
   def __init__(self, server_address, RequestHandlerClass, fcgi_server):
@@ -33,7 +31,7 @@ class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
       embedded_http_server.EmbeddedHTTPServer.server_bind(self)
     except socket.error, e:
       if e[0] == errno.EADDRINUSE and self.fd_server:
-        log.info('requesting bound fd %s', self.server_address)
+        logging.info('requesting bound fd %s', self.server_address)
         fd_client = fd_server.FdClient(self.fd_server.server_address)
         fd = fd_client.get_fd_for_address(self.server_address)
         self.socket = socket.fromfd(fd, socket.AF_INET, socket.SOCK_STREAM)
@@ -47,7 +45,7 @@ class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
       bound_fd = self.socket.fileno()
       self.fd_server.register_fd(bind_address, bound_fd)
       logging.info('registered fd %s %s', bind_address, bound_fd)
-
+    logging.debug('bound %s', self)
 
   
 class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):
@@ -69,7 +67,7 @@ class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):
       self.server.fcgi_server.set_max_rss(max_rss)
       return 'OK.\n'
     except ValueError, e:
-      log.warning('ignored bizzare max_rss: %s', max_rss)
+      logging.warning('ignored bizzare max_rss: %s', max_rss)
       return 'ERROR.\n%s\n' % e
 
   def handle_resume_spawning(self):

@@ -4,6 +4,8 @@ import os.path
 import re
 import select
 import signal
+import socket
+import threading
 import time
 import sys
 
@@ -19,11 +21,12 @@ class PreForkingMixIn(object):
   signal_list = (signal.SIGTERM, signal.SIGINT, signal.SIGALRM,
                  signal.SIGHUP)
   alarm_interval = None
-  check_interval = 1
-
+  check_interval = 30
+  rss_check_interval = 30
+  
   def parent_signal_handler(self, signalnum, stack_frame):
     if signalnum != signal.SIGALRM:
-      log.debug("parent signal: %s", signalnum)
+      logging.debug("parent signal: %s", signalnum)
 
     if signalnum in (signal.SIGTERM, signal.SIGINT):
       self._quit = True
@@ -36,7 +39,7 @@ class PreForkingMixIn(object):
       signalnum = signal.SIGTERM
 
     # the parent repeats the signal to the children
-    for pid in self._child_pids:
+    for pid in self.child_pids:
       # in most cases, you need to resend the signal to the child pids
       # however, this doesn't seem to be true with SIGINT, it looks like
       # there might be some python magic going on
@@ -58,7 +61,7 @@ class PreForkingMixIn(object):
     # HUP seems to have some issues - something must be registering it
     # INT and TERM both want to cause the child to die nicely
     # if that's not what you want, you'll have to send a KILL
-    log.debug("child signal: %s", signalnum)
+    logging.debug("child signal: %s", signalnum)
     if signalnum in (signal.SIGTERM, signal.SIGINT):
       self._quit = True
 
@@ -71,8 +74,8 @@ class PreForkingMixIn(object):
 
 #   # NOTE: this can't be used reliably in a thread.
 #   # on some platforms, you get stats about a process by exec'ing a tool and
-#   # waiting for it. with multiple threads calling wait(), you get a race
-#   # condition. this is on BSD for the moment.
+#   # waiting for it. with multiple threads calling wait() for different
+#   # processes, you get a race condition. this is on BSD for the moment.
 #   def check_children_loop(self):
 #     while True:
 #       time.sleep(self.check_interval)
@@ -87,14 +90,14 @@ class PreForkingMixIn(object):
     # there are resources to do so, then kill the unruly children. this
     # might result in smoother response times
     if not self._quit and self._max_rss and self._allow_spawning:
-      for pid in self._child_pids:
+      for pid in self.child_pids:
         try:
           rss = resource_manager.get_memory_usage(pid)['VmRSS']
         except resource_manager.MemoryException, e:
-          log.warning('resource manager error pid: %s %s', pid, e)
+          logging.warning('resource manager error pid: %s %s', pid, e)
           continue
         if rss > self._max_rss:
-          log.info('kill child pid: %s, rss: %s', pid, rss)
+          logging.info('kill child pid: %s, rss: %s', pid, rss)
           os.kill(pid, signal.SIGTERM)
           # fixme: sigterm is ok for now, but we might need to escalate to a
           # sigkill at some point
@@ -105,15 +108,21 @@ class PreForkingMixIn(object):
     # cleanly registering periodic tasks. unfortunately, mixing threads and
     # subprocesses is a bit unclean with overlapping calls to wait().
 
-    while len(self._child_pids):
+    while len(self.child_pids):
       try:
         pid, status = os.waitpid(-1, os.WNOHANG)
         if pid:
           try:
-            self._child_pids.remove(pid)
-            log.info("child finished: %s, %s", pid, status)
+            # NOTE: this is the first good place I can think of to use the
+            # 'with' statement
+            self._lock.acquire()
+            try:
+              self._child_pids.remove(pid)
+            finally:
+              self._lock.release()
+            logging.info("child finished: %s, %s", pid, status)
           except KeyError, e:
-            log.debug("child finished, no such pid: %s, %s",
+            logging.debug("child finished, no such pid: %s, %s",
                       pid, status)
             # this is probably a secondary process that we aren't
             # interested in - just wait for the next child to die
@@ -122,22 +131,27 @@ class PreForkingMixIn(object):
             self.handle_bad_child(pid, status)
       except OSError, e:
         if e[0] == errno.EINTR:
-          log.debug("process interrupted")
+          logging.debug("process interrupted")
         elif e[0] == errno.ECHILD:
-          log.error("no children, terminating parent: %s", e)
+          logging.error("no children, terminating parent: %s", e)
           break
         else:
           # error that aren't expected, or understood should log, but
           # not stop the server
-          log.exception("unhandled error in manage_children")
+          logging.exception("unhandled error in manage_children")
 
-      time.sleep(self.check_interval)
-      self.check_children()
+      # if would be better to run this in it's own execution thread
+      # but there are issues with too many execution paths using waitpid()
+      # if something died, respawn - there will be plenty of time to scan for
+      # misbehaving children later
+      if not pid:
+        time.sleep(self.check_interval)
+        self.check_children()
       
       while (not self._quit and
-             len(self._child_pids) < self._workers):
+             len(self.child_pids) < self._workers):
         if not self._allow_spawning:
-          log.warning("spawning disabled")
+          logging.warning("spawning disabled")
           break
         self.spawn_child()
 
@@ -153,13 +167,19 @@ class PreForkingMixIn(object):
       raise ValueError('unsane worker count: %s', workers)
 
     self.set_allow_spawning(True)
-    old_pids = tuple(self._child_pids)
+    old_pids = self.child_pids
     if workers:
-      self._workers = workers
+      self._lock.acquire()
+      try:
+        self._workers = workers
+      finally:
+        self._lock.release()
 
     for i, pid in enumerate(old_pids):
-      if not workers or i < workers:
-        self.spawn_child()
+      # this is no longer helpful since it runs in a thread.
+      # the main child manager will handle the creating just fine.
+      #if not workers or i < workers:
+      #  self.spawn_child()
       if force:
         os.kill(pid, signal.SIGKILL)
       else:
@@ -172,9 +192,15 @@ class PreForkingMixIn(object):
   # operate on a consistent copy. the server as a whole should trend towards
   # consistency.
   def handle_server_prune_worker(self):
-    if self._workers:
-      self._workers -= 1
-      pid = self._child_pids.pop()
+    pid = None
+    self._lock.acquire()
+    try:
+      if self._workers:
+        self._workers -= 1
+        pid = self.child_pids[0]
+    finally:
+      self._lock.release()
+    if pid is not None:
       os.kill(pid, signal.SIGTERM)
 
   # NOTE: THREADED this executes in another thread. there are shared variables
@@ -185,10 +211,25 @@ class PreForkingMixIn(object):
     """Keep removing workers until there aren't any.
 
     Each worker should terminate gracefully, as should the parent."""
-    while self._workers:
-      self._workers -= 1
-      pid = self._child_pids.pop()
+    self.graceful_shutdown()
+
+    timer = threading.Timer(5.0, self.graceful_shutdown)
+    timer.setDaemon(True)
+    timer.start()
+
+    # schedule some insurance - if this thread is still alive in 30 seconds,
+    # send SIGKILL to the children and let the parent tear down nicely.
+    timer = threading.Timer(30.0, self.force_shutdown)
+    timer.setDaemon(True)
+    timer.start()
+
+  def graceful_shutdown(self):
+    for pid in self.child_pids:
       os.kill(pid, signal.SIGTERM)
+
+  def force_shutdown(self):
+    for pid in self.child_pids:
+      os.kill(pid, signal.SIGKILL)
 
   # FIXME: this is kind of dopey the way we have to send back an http-like
   # response. should this be only in the management_server?
@@ -206,21 +247,21 @@ class PreForkingMixIn(object):
       else:
         return (500, str(e))
     except Exception, e:
-      log.exception("handle_server_last_profile_data")
+      logging.exception("handle_server_last_profile_data")
       return (500, str(e))
 
   def handle_bad_child(self, pid, status):
     # a child exitted with a non-zero return code
-    log.error("child error on exit: %s, %s", pid, status)
+    logging.error("child error on exit: %s, %s", pid, status)
 
   def spawn_child(self, profile_path=None, profile_uri=None,
                   max_requests=None, skip_profile_requests=None,
                   profile_bias=None, profiler_module=None):
     if not self._allow_spawning:
-      log.warning('spawn_child is disabled')
+      logging.warning('spawn_child is disabled')
       return
 
-    log.debug("respawning a child")
+    logging.debug("respawning a child")
     pid = os.fork()
     if pid:
       # parent
@@ -258,7 +299,7 @@ class PreForkingMixIn(object):
         os.remove(last_profile_link)
       except OSError, e:
         if e[0] not in (errno.ENOENT,):
-          log.exception("error removing symlink: %s",
+          logging.exception("error removing symlink: %s",
                         last_profile_link)
       self._profile = resource_manager.get_profiler(profiler_module, path,
                                                     bias=profile_bias)
@@ -296,27 +337,45 @@ class PreForkingMixIn(object):
         self._handle_io_error(e)
 
   def serve_forever(self):
+    # if you are a stealing existing file descriptors and you know the previous
+    # pid, fire up a client so you can gracefully prune the children as you
+    # start up. the thinking is that if you start too quickly you will use up
+    # too much memory or suddenly swap too many processes that need to do time
+    # consuming operations like initialize connections.
     if self._fd_server and self._previous_pid:
       uclient = micro_management_server.MicroManagementClient(
         '%s-%s' % (self._fd_server.server_address, self._previous_pid))
     else:
       uclient = None
 
-    while len(self._child_pids) < self._workers:
-      logging.debug('serve_forever - spawn %s/%s %s', len(self._child_pids)+1, self._workers, uclient)
+    while len(self.child_pids) < self._workers:
+      logging.debug('serve_forever - spawn %s/%s',
+                len(self._child_pids) + 1, self._workers)
       if uclient:
-        uclient.prune_worker()
+        try:
+          logging.debug('sending prune_worker to old wiseguy')
+          uclient.prune_worker()
+        except socket.timeout:
+          # if we timed out, maybe the parent is already dead
+          logging.warning('uclient timed out during prune_worker')
+        except Exception, e:
+          logging.warning('uclient error during prune_worker: %s', e)
       self.spawn_child()
 
+    # once you have spawned as many children as you think you need, send the
+    # graceful_shutdown command to get rid of any child workers that might be
+    # still hanging around. This will likely fail when you are increasing the
+    # number of children since you will have called prune_worker() more times
+    # than there are actual workers.
     if uclient:
       try:
         uclient.graceful_shutdown()
       except Exception, e:
-        log.warning('graceful_shutdown failed: %s', e)
+        logging.warning('graceful_shutdown failed: %s', e)
       
     self.install_parent_signals()
     try:
       self.manage_children()
     except:
-      log.exception("unhandled exception in manage_children, exitting")
+      logging.exception("unhandled exception in manage_children, exitting")
 

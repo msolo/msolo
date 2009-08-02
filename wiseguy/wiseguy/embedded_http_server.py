@@ -1,3 +1,4 @@
+import atexit
 import BaseHTTPServer
 import cgi
 import errno
@@ -13,18 +14,37 @@ import wiseguy
 class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
   allow_reuse_address = True
   server_version = 'wiseguy/' + wiseguy.__version__
-
+  teardown_timeout = 2.0
+  
   def __init__(self, server_address, RequestHandlerClass):
     self._quit = False
     self._thread = None
     BaseHTTPServer.HTTPServer.__init__(
       self, server_address, RequestHandlerClass)
 
+  def __str__(self):
+    return '<%s@%s>' % (self.__class__.__name__, self.server_address)
+
+  def get_request(self):
+    # Running under Linux the select() call can return, even when there isn't
+    # data, so accept() will hang anyway. This of course blows, so do this
+    # as non-blocking temporarily and restor whatever mischief was there to
+    # begin with. Beginning to wonder if the only reasonable way to do a python
+    # web server is with the dreaded asynchat.
+    old_timeout = self.socket.gettimeout()
+    try:
+      self.socket.settimeout(0.0)
+      return BaseHTTPServer.HTTPServer.get_request(self)
+    finally:
+      self.socket.settimeout(old_timeout)
+  
   def start(self):
     self._thread = threading.Thread(
       target=self.serve_forever, name='embedded_http_server')
     self._thread.setDaemon(True)
+    atexit.register(self.stop)
     self._thread.start()
+    
 
   def stop(self):
     self._quit = True
@@ -33,10 +53,11 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
     try:
       urllib.urlopen('http://127.0.0.1:%s/__quit__' % self.server_port)
     finally:
-      self._thread.join()
+      self._thread.join(self.teardown_timeout)
 
   def serve_forever(self):
     try:
+      logging.info('started %s', self)
       # fixme: not needed in python2.6
       while not self._quit:
         try:
@@ -51,6 +72,7 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
             raise
     except KeyboardInterrupt:
       pass
+    logging.info('shutdown %s', self)
 
 
 class EmbeddedRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):

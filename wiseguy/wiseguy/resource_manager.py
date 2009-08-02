@@ -28,14 +28,14 @@ def generic_get_memory_usage(pid):
     if e[0] in (errno.EINTR,):
       raise MemoryException("interrupted during wait()")
     else:
-      log.exception("unexpected error in get_memory_usage")
+      logging.exception("unexpected error in get_memory_usage")
       raise MemoryException("unexpected error: %s" % e)
   lines = proc.stdout.readlines()
   try:
     rss_size_kb, vsz_kb = lines[-1].strip().split()
     rss_size_kb, vsz_kb = int(rss_size_kb), int(vsz_kb)
   except ValueError:
-    # log.exception("bad value for process RSS:\n%s", str(lines))
+    # logging.exception("bad value for process RSS:\n%s", str(lines))
     raise MemoryException("bad value: %s" % str(lines))
 
   return {'VmRSS':rss_size_kb, 'VmSize':vsz_kb}

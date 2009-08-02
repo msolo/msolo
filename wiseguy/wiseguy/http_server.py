@@ -1,10 +1,10 @@
 import errno
 import logging
+import select
 import socket
 import struct
 import time
 
-from wsgiref import handlers
 from wsgiref import simple_server
 
 import wiseguy
@@ -30,13 +30,16 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
       self, self._server_address, RequestHandlerClass);
 
   def server_bind(self):
-    logging.error('server_bind')
     bind_address = self.server_address
     try:
       simple_server.WSGIServer.server_bind(self)
       self._listen_socket = self.socket
+      if self._drop_privileges_callback:
+        self._drop_privileges_callback()
     except socket.error, e:
       if e[0] == errno.EADDRINUSE:
+        if self._drop_privileges_callback:
+          self._drop_privileges_callback()
         fd_client = fd_server.FdClient(self._fd_server.server_address)
         fd = fd_client.get_fd_for_address(self.server_address)
         self._previous_pid = fd_client.get_pid()
@@ -58,6 +61,7 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
       bound_fd = self._listen_socket.fileno()
       self._fd_server.register_fd(bind_address, bound_fd)
       logging.info('registered fd %s %s', bind_address, bound_fd)
+    logging.debug('bound %s', self)
 
   def server_activate(self):
     simple_server.WSGIServer.server_activate(self)
@@ -75,7 +79,9 @@ class WiseguyWSGIHandler(simple_server.ServerHandler):
   for dynamic requests in the close method."""
 
   server_software = 'wiseguy/%s' % wiseguy.__version__
-
+  start = None
+  request_handler = None
+  
   def log_exception(self, exc_info):
     try:
       elapsed = time.time() - self.start      
@@ -152,12 +158,18 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   request_count = 0
   start_time = None
   raw_requestline = None
+  # how long will we wait after accepting a connection or processing a request
+  # before we return to the accept() loop
+  keepalive_timeout = 5.0
 
   def setup(self):
     self.connection = self.request
-    self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, 0)
-    self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, NOLINGER)
+    # NOTE: these were added when I could not figure out where the load
+    # balancer was getting confused. I'm not convinced they are necessary
+    # so I'm removing them for now.
+    #self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    #self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, 0)
+    #self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, NOLINGER)
     self.rfile = self.connection.makefile('rb', self.rbufsize)
     self.wfile = self.connection.makefile('wb', self.wbufsize)
     self.rfile = SocketFileWrapper(self.rfile, self)
@@ -188,12 +200,22 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
       self.handle_one_request()
       while not self.close_connection:
         self.handle_one_request()
+    except IOError, e:
+      elapsed = time.time() - self.start_time
+      logging.warning('%s "%s" %s %8.6f',
+                      self.address_string(), self.raw_requestline, e, elapsed)
     except Exception, e:
       elapsed = time.time() - self.start_time
-      logging.exception('http error %s %s "%s"',
-         e, elapsed, self.raw_requestline)
+      logging.exception('http error %s "%s" %s %s',
+         self.address_string(), self.raw_requestline, e, elapsed)
 
   def handle_one_request(self):
+    ready_rfds, ready_wfds, ready_xfds = select.select(
+      [self.rfile], [], [self.rfile], self.keepalive_timeout)
+    if not ready_rfds:
+      logging.debug('%s closing idle connection', self.address_string())
+      self.close_connection = True
+      return
     self.start_time = time.time()
     try:
       self.raw_requestline = self.rfile.readline()
@@ -229,12 +251,12 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   def _run_wsgi_app(self):
     handler = self.wsgi_handler_class(
       self.rfile, self.wfile, self.get_stderr(), self.get_environ())
-    handler.request_handler = self    # backpointer for logging
+    # NOTE: handy backpointer, but gc problem?
+    handler.request_handler = self
     handler.run(self.server.get_app())
-
+    handler.request_handler = None
 
 class PreForkingHTTPWSGIServer(preforking.PreForkingMixIn, HTTPServer):
   def __init__(self, app, *pargs, **kargs):
     HTTPServer.__init__(self, *pargs, **kargs)
     self.set_app(app)
-  

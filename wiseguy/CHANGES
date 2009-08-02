@@ -1,3 +1,16 @@
+0.6.1 - continued refactoring.
+cleaned up the threaded use cases and inserted minimal locking.
+reordered the socket binding code allow for proper ownership of sockets when
+dropping privileges.
+removed some junk logging that required more complex initialization of logging
+module. probably should revisit that when refactoring wiseguyd.
+added defensive timeouts to the unix domain socket code.
+added a bit more debug logging since the application initialization is now
+quite complex, more hints are needed to properly understand the order of 
+operations.
+fixed graceful shutdown give the application every possible chance to exit
+cleanly before issuing a SIGKILL after 30 seconds.
+
 0.6 - extensive refactoring to support http and fcgi protocols.
 added support for file descriptor passing and high availability.
 refactored the embedded management server to use threads instead of the

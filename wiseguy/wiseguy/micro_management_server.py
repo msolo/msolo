@@ -10,6 +10,7 @@ class MicroManagementError(embedded_sock_server.ClientError):
 
 
 class MicroManagementClient(embedded_sock_server.SocketClient):
+  @embedded_sock_server.disconnect_on_completion
   def prune_worker(self):
     self.send_str('prune_worker')
     response = self.recv_str()
@@ -21,6 +22,7 @@ class MicroManagementClient(embedded_sock_server.SocketClient):
     else:
       raise MicroManagementError('bad response %r' % response)
 
+  @embedded_sock_server.disconnect_on_completion
   def graceful_shutdown(self):
     self.send_str('graceful_shutdown')
     response = self.recv_str()
@@ -63,6 +65,7 @@ class MicroManagementServer(embedded_sock_server.EmbeddedSockServer):
   """Handle removing child processes during the restart process."""
   thread_name = 'micro_management_server'
   fcgi_server = None
+  _bound = False
   
   def __init__(self, server_address, fcgi_server,
                RequestHandlerClass=MicroManagementHandler,
@@ -70,3 +73,9 @@ class MicroManagementServer(embedded_sock_server.EmbeddedSockServer):
     self.fcgi_server = fcgi_server
     embedded_sock_server.EmbeddedSockServer.__init__(
       self, server_address, RequestHandlerClass, **kargs)
+
+  def start(self):
+    if not self._bound:
+      self.server_bind()
+      self.server_activate()
+    embedded_sock_server.EmbeddedSockServer.start(self)
