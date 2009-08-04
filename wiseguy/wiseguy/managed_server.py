@@ -66,6 +66,8 @@ class ManagedServer(object):
     self._profiler_module = profiler_module
     self._init_functions = []
     self._exit_functions = []
+    # FIXME: should we add a _privileged_functions? this would run before
+    # we drop down from root. would we run these if you weren't root?
     self._drop_privileges_callback = drop_privileges_callback
     # should we allow the a new process to fork?
     self._allow_spawning = True

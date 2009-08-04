@@ -82,8 +82,3 @@ class FCGIServer(managed_server.ManagedServer):
 
   def handle_error(self, request, client_address):
     self.error(request, sys.exc_info()[2])
-
-  def close_request(self, req):
-    """Implemented to make ManagedServer more consistent."""
-    pass
-  
