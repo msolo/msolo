@@ -16,7 +16,10 @@ except ImportError:
 
 
 class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
-  def __init__(self, server_address, RequestHandlerClass, fcgi_server):
+  def __init__(self, server_address,
+               RequestHandlerClass=None,
+               fcgi_server=None):
+    RequestHandlerClass = RequestHandlerClass or ManagementRequestHandler
     self.fcgi_server = fcgi_server
     embedded_http_server.EmbeddedHTTPServer.__init__(
       self, server_address, RequestHandlerClass)

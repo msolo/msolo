@@ -20,6 +20,8 @@ class WiseguyError(Exception):
 
 
 class ManagedServer(object):
+  management_server_class = management_server.ManagementServer
+  
   def __init__(self, server_address=None, management_address=None,
                workers=5, max_requests=None,
                max_rss=None, profile_path=None, profile_uri=None,
@@ -43,9 +45,6 @@ class ManagedServer(object):
     self._server_address = server_address
     self._management_address = management_address
     self._fd_server_address = fd_server_address
-    # override in a subclass if you want to customized the management
-    # server instance after the fact
-    self._management_server_class = None
     self._listen_socket = None
     self._listen_fd = 0
     self._accept_input_timeout = accept_input_timeout
@@ -111,16 +110,9 @@ class ManagedServer(object):
     finally:
       self._lock.release()
   
-
-  def start_management_server(
-    self, server_class=None, request_class=None, management_address=None):
-    _server_class = (server_class or self._management_server_class or
-                     management_server.ManagementServer)
-    _request_class = (request_class or
-                      management_server.ManagementRequestHandler)
-    _management_address = management_address or self._management_address
-    self._management_server = _server_class(
-      _management_address, _request_class, self)
+  def start_management_server(self):
+    self._management_server = self.management_server_class(
+      self._management_address, fcgi_server=self)
     self._management_server.start()
 
   def start_fd_server(self):
@@ -341,8 +333,8 @@ class ManagedServer(object):
     bias, profiler_module):
     try:
       pid = tuple(self._child_pids)[0]
-      self.spawn_child(profile_path, profile_uri, request_count, skip_request_count,
-               bias, profiler_module)
+      self.spawn_child(profile_path, profile_uri, request_count,
+                       skip_request_count, bias, profiler_module)
       os.kill(pid, signal.SIGTERM)
     except:
       logging.exception("handle_server_profile")
