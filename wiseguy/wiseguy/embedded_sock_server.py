@@ -5,7 +5,6 @@ a binary protocol at the moment, but that might be annoying for debugging in
 the longer term.
 """
 
-import atexit
 import errno
 import logging
 import os
@@ -132,7 +131,6 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
     self.thread = threading.Thread(
       target=self.serve_forever, name=self.thread_name)
     self.thread.setDaemon(True)
-    atexit.register(self.stop)
     self.thread.start()
 
   def get_request(self):

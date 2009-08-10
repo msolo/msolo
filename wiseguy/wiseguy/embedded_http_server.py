@@ -1,4 +1,3 @@
-import atexit
 import BaseHTTPServer
 import cgi
 import errno
@@ -42,7 +41,6 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
     self._thread = threading.Thread(
       target=self.serve_forever, name='embedded_http_server')
     self._thread.setDaemon(True)
-    atexit.register(self.stop)
     self._thread.start()
     
 

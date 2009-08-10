@@ -1,6 +1,8 @@
+import atexit
 import errno
 import logging
 import os.path
+import random
 import re
 import select
 import signal
@@ -269,7 +271,7 @@ class PreForkingMixIn(object):
       return pid
 
     # child
-    self.install_child_signals()
+    self.post_fork_init()
 
     if not profile_path:
       profile_path = self._profile_path
@@ -322,6 +324,24 @@ class PreForkingMixIn(object):
       os.symlink(self._profile.filename, last_profile_link)
       
     self.exit_child()
+
+  def post_fork_reinit(self):
+    """Run anything that reinitializes the python process.
+
+    This is a catch-all for patching modules that assume they
+    are running in a single process environment and get confused
+    by forking."""
+
+    # quickly register our own signals
+    self.install_child_signals()
+
+    # remove any exit handlers - anything registered at this point is not
+    # relevant. register a wiseguy-specific exit handler instead
+    del atexit._exithandlers[:]
+    
+    # you don't want all your workers to have the same pseudo random order
+    # go ahead and reseed it.
+    random.seed()
     
   def _child_request_loop(self):
     while not self._quit:
