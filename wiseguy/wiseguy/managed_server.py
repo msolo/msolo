@@ -94,12 +94,12 @@ class ManagedServer(object):
       self._micro_management_server = None
 
     if self._management_address:
-      self.start_management_server()
+      self._management_server = self.management_server_class(
+        self._management_address, fcgi_server=self, bind_and_activate=False)
 
     if bind_and_activate:
       self.server_bind()
       self.server_activate()
-
 
   @property
   def child_pids(self):
@@ -110,23 +110,19 @@ class ManagedServer(object):
     finally:
       self._lock.release()
   
-  def start_management_server(self):
-    self._management_server = self.management_server_class(
-      self._management_address, fcgi_server=self)
-    self._management_server.start()
-
-  def start_fd_server(self):
-    if self._fd_server:
-      logging.debug('start_fd_server')
-      self._fd_server.start()
-      logging.debug('start_micro_management_server')
-      self._micro_management_server.start()
-    
   def server_bind(self):
     raise NotImplementedError
 
   def server_activate(self):
-    self.start_fd_server()
+    if self._fd_server:
+      logging.debug('start fd_server')
+      self._fd_server.start()
+    if self._micro_management_server:
+      logging.debug('start micro_management_server')
+      self._micro_management_server.start()
+    if self._management_server:
+      logging.debug('start management_server')
+      self._management_server.start()
         
   def register_init_function(self, function, *pargs, **kargs):
     """these run in the child process prior to starting the request loop"""
@@ -164,6 +160,7 @@ class ManagedServer(object):
 
   def init_child(self):
     """Run before entering the accept loop."""
+    
     if self._profile_memory:
       self.init_profile_memory()
     self._run_init_functions()
@@ -245,10 +242,15 @@ class ManagedServer(object):
     finally:
       os._exit(0)
 
+
   def close_request(self, req):
-    """Run after handle() returns for each request."""
+    """Run after handle() returns for each connection.
+
+    The problem is that the standard library is phrased in terms of 'requests',
+    but in reality it is talking about connections."""
     if self._profile_memory:
       self.handle_profile_memory(req)
+      
     if self._max_requests is not None:
       # if we are profiling a specific servlet, only count the
       # hits to that servlet against the request limit
@@ -299,8 +301,7 @@ class ManagedServer(object):
       logging.warning('failed handle_profile_memory: %s', str(e))
       return
     
-    mem_delta = compute_memory_delta(self._mem_stats,
-                                     current_mem_stats)
+    mem_delta = compute_memory_delta(self._mem_stats, current_mem_stats)
     self._mem_stats = current_mem_stats
     # only log if something changed
     if (mem_delta['VmSize'] > self._profile_memory_min_delta or

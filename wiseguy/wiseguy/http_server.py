@@ -2,8 +2,10 @@ import errno
 import logging
 import select
 import socket
+import string
 import struct
 import time
+import urllib
 
 from wsgiref import simple_server
 
@@ -18,17 +20,24 @@ from wiseguy import preforking
 
 NOLINGER = struct.pack('ii', 1, 0)
 
+translate_header_table = string.maketrans(
+  'abcdefghijklmnopqrstuvwxyz-',
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ_')
+
 class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
   def __init__(self, *pargs, **kargs):
-    # don't bind and activate yet, that will be handled when the other class
-    # initializes
-    kargs['bind_and_activate'] = False
-    managed_server.ManagedServer.__init__(self, *pargs, **kargs)
+    # don't bind_and_activate in the managed_server
+    # that will be handled when the WSGIServer initializes, or externally by
+    # the calling code
+    managed_kargs = kargs.copy()
+    managed_kargs['bind_and_activate'] = False
+    managed_server.ManagedServer.__init__(self, *pargs, **managed_kargs)
     RequestHandlerClass = kargs.get(
       'RequestHandlerClass', WiseguyRequestHandler)
     simple_server.WSGIServer.__init__(
-      self, self._server_address, RequestHandlerClass);
-
+      self, self._server_address, RequestHandlerClass,
+      bind_and_activate=kargs.get('bind_and_activate', True))
+    
   def server_bind(self):
     bind_address = self.server_address
     try:
@@ -56,6 +65,7 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
         # bailed out when we could bind initially
         self.setup_environ()
       else:
+        logging.error('failed to bind socket %s', bind_address)
         raise
     if self._fd_server:
       bound_fd = self._listen_socket.fileno()
@@ -70,6 +80,10 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
   def close_request(self, request):
     simple_server.WSGIServer.close_request(self, request)
     managed_server.ManagedServer.close_request(self, request)    
+
+  # this is the main entry point and it will override the implementation in
+  # ManagedServer. it is inherited from the base class.
+  # def handle_request(self):
 
 
 class WiseguyWSGIHandler(simple_server.ServerHandler):
@@ -246,7 +260,25 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
           if self.rfile.socket_tell() == (self.header_size + content_length):
             self.close_connection = False
     finally:
+      # this tracks the number of requests handled by a persistent connection
       self.request_count += 1
+
+      # we need to call the close_request functionality here, but only if we
+      # are dealing with persistent connections - otherwise this will be
+      # called when the connection is torn down.
+      # FIXME: this is a little hard to understand because the fcgi and http
+      # code paths are not as identical as they could be.
+      if not self.close_connection:
+        # specifically, we want to call the routine on ManagedServer, not the
+        # one on SocketServer. Multiple inheritence definitely getting beyond
+        # shady here.
+        #self.server.close_request(self)
+        managed_server.ManagedServer.close_request(self.server, self)
+        # if we decide to terminate, close the connection immediately
+        # FIXME: this results in this request getting double counted, but has
+        # no immediately upleasant implication.
+        if self.server._quit:
+          self.close_connection = True
 
   def _run_wsgi_app(self):
     handler = self.wsgi_handler_class(
@@ -255,6 +287,47 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
     handler.request_handler = self
     handler.run(self.server.get_app())
     handler.request_handler = None
+
+  def get_environ(self):
+    """An optimization for code orginally wsgiref.handlers."""
+    env = self.server.base_environ.copy()
+    env['SERVER_PROTOCOL'] = self.request_version
+    env['REQUEST_METHOD'] = self.command
+    if '?' in self.path:
+      path, query = self.path.split('?', 1)
+    else:
+      path, query = self.path, ''
+
+    env['PATH_INFO'] = urllib.unquote(path)
+    env['QUERY_STRING'] = query
+
+    host = self.address_string()
+    if host != self.client_address[0]:
+      env['REMOTE_HOST'] = host
+    env['REMOTE_ADDR'] = self.client_address[0]
+
+    if self.headers.typeheader is None:
+      env['CONTENT_TYPE'] = self.headers.type
+    else:
+      env['CONTENT_TYPE'] = self.headers.typeheader
+
+    length = self.headers.getheader('content-length')
+    if length:
+      env['CONTENT_LENGTH'] = length
+
+    for h in self.headers.headers:
+      k, v = h.split(':', 1)
+      k = k.translate(translate_header_table)
+      v = v.strip()
+      if k in env:
+        continue
+      http_key = 'HTTP_' + k
+      if http_key in env:
+        env[http_key] += ',' + v     # comma-separate multiple headers
+      else:
+        env[http_key] = v
+    return env
+
 
 class PreForkingHTTPWSGIServer(preforking.PreForkingMixIn, HTTPServer):
   def __init__(self, app, *pargs, **kargs):

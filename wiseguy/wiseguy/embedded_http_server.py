@@ -11,18 +11,29 @@ import urlparse
 import wiseguy
 
 class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
+  thread_name = 'embedded_http_server'
   allow_reuse_address = True
   server_version = 'wiseguy/' + wiseguy.__version__
   teardown_timeout = 2.0
+  _bound = False
+  _activated = False
   
-  def __init__(self, server_address, RequestHandlerClass):
+  def __init__(self, server_address, RequestHandlerClass, **kargs):
     self._quit = False
     self._thread = None
     BaseHTTPServer.HTTPServer.__init__(
-      self, server_address, RequestHandlerClass)
+      self, server_address, RequestHandlerClass, **kargs)
 
   def __str__(self):
     return '<%s@%s>' % (self.__class__.__name__, self.server_address)
+
+  def server_bind(self):
+    BaseHTTPServer.HTTPServer.server_bind(self)
+    self._bound = True
+
+  def server_activate(self):
+    BaseHTTPServer.HTTPServer.server_activate(self)
+    self._activated = True
 
   def get_request(self):
     # Running under Linux the select() call can return, even when there isn't
@@ -38,11 +49,14 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
       self.socket.settimeout(old_timeout)
   
   def start(self):
+    if not self._bound:
+      self.server_bind()
+    if not self._activated:
+      self.server_activate()
     self._thread = threading.Thread(
-      target=self.serve_forever, name='embedded_http_server')
+      target=self.serve_forever, name=self.thread_name)
     self._thread.setDaemon(True)
-    self._thread.start()
-    
+    self._thread.start()    
 
   def stop(self):
     self._quit = True

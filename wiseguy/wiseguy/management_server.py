@@ -16,13 +16,15 @@ except ImportError:
 
 
 class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
+  thread_name = 'management_server'
+  
   def __init__(self, server_address,
                RequestHandlerClass=None,
-               fcgi_server=None):
+               fcgi_server=None, **kargs):
     RequestHandlerClass = RequestHandlerClass or ManagementRequestHandler
     self.fcgi_server = fcgi_server
     embedded_http_server.EmbeddedHTTPServer.__init__(
-      self, server_address, RequestHandlerClass)
+      self, server_address, RequestHandlerClass, **kargs)
 
   @property
   def fd_server(self):
@@ -49,6 +51,7 @@ class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
       self.fd_server.register_fd(bind_address, bound_fd)
       logging.info('registered fd %s %s', bind_address, bound_fd)
     logging.debug('bound %s', self)
+    self._bound = True
 
   
 class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):

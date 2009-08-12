@@ -123,11 +123,17 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
   thread = None
   unbind_on_shutdown = True
   teardown_timeout = 2.0
+  _bound = False
+  _activated = False
 
   def __str__(self):
     return '<%s@%s>' % (self.__class__.__name__, self.server_address)
   
   def start(self):
+    if not self._bound:
+      self.server_bind()
+    if not self._activated:
+      self.server_activate()
     self.thread = threading.Thread(
       target=self.serve_forever, name=self.thread_name)
     self.thread.setDaemon(True)
@@ -156,13 +162,22 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
       except EnvironmentError, e:
         logging.error('error removing %s', self.server_address)
 
+  def server_bind(self):
+    SocketServer.UnixStreamServer.server_bind(self)
+    self._bound = True
+
+  def server_activate(self):
+    SocketServer.UnixStreamServer.server_activate(self)
+    self._activated = True
+
   def serve_forever(self, poll_interval=0.5):
     logging.info('started %s', self)
     self._BaseServer__serving = True
     self._BaseServer__is_shut_down.clear()
     while self._BaseServer__serving:
       try:
-        r, w, e = select.select([self], [], [], poll_interval)
+        ready_rfds, ready_wfds, error_fds = select.select(
+          [self], [], [], poll_interval)
       except select.error, e:
         # a call to setuid() can cause your threads to receive an untrappable
         # signal, SIGRT_1 (at least on Linux)
@@ -171,7 +186,10 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
           continue
         else:
           raise
-      if r:
-        self._handle_request_noblock()
+      if ready_rfds:
+        try:
+          self._handle_request_noblock()
+        except:
+          logging.exception('error in _handle_request_noblock')
     self._BaseServer__is_shut_down.set()
     logging.info('shutdown %s', self)

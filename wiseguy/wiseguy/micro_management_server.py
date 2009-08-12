@@ -65,7 +65,6 @@ class MicroManagementServer(embedded_sock_server.EmbeddedSockServer):
   """Handle removing child processes during the restart process."""
   thread_name = 'micro_management_server'
   fcgi_server = None
-  _bound = False
   
   def __init__(self, server_address, fcgi_server,
                RequestHandlerClass=MicroManagementHandler,
@@ -73,9 +72,3 @@ class MicroManagementServer(embedded_sock_server.EmbeddedSockServer):
     self.fcgi_server = fcgi_server
     embedded_sock_server.EmbeddedSockServer.__init__(
       self, server_address, RequestHandlerClass, **kargs)
-
-  def start(self):
-    if not self._bound:
-      self.server_bind()
-      self.server_activate()
-    embedded_sock_server.EmbeddedSockServer.start(self)

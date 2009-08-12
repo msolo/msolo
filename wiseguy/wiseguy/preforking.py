@@ -271,7 +271,7 @@ class PreForkingMixIn(object):
       return pid
 
     # child
-    self.post_fork_init()
+    self.post_fork_reinit()
 
     if not profile_path:
       profile_path = self._profile_path

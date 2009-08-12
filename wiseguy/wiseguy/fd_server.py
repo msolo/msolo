@@ -5,7 +5,6 @@ import logging
 import _multiprocessing
 import os
 import socket
-import SocketServer
 import time
 
 from wiseguy import embedded_sock_server
@@ -97,7 +96,6 @@ class FdServer(embedded_sock_server.EmbeddedSockServer):
   fd_map = None
   thread_name = 'fd_server'
   unbind_on_shutdown = False
-  _bound = False
 
   def __init__(self, *pargs, **kargs):
     self.fd_map = {}
@@ -113,7 +111,7 @@ class FdServer(embedded_sock_server.EmbeddedSockServer):
     # always register yourself
     bind_address = self.server_address
     try:
-      SocketServer.UnixStreamServer.server_bind(self)
+      embedded_sock_server.EmbeddedSockServer.server_bind(self)
       logging.info('bound fd_server %s', bind_address)
     except socket.error, e:
       if e[0] == errno.EADDRINUSE:
@@ -125,19 +123,13 @@ class FdServer(embedded_sock_server.EmbeddedSockServer):
         except socket.error, e:
           logging.warning('forced teardown on %s', bind_address)
           os.remove(self.server_address)
-          SocketServer.UnixStreamServer.server_bind(self)
+          embedded_sock_server.EmbeddedSockServer.server_bind(self)
     bound_fd = self.socket.fileno()
     self.register_fd(bind_address, bound_fd)
     logging.info('registered fd %s %s', bind_address, bound_fd)
-    self._bound = True
     logging.debug('bound %s', self)
+    self._bound = True
     
-  def start(self):
-    if not self._bound:
-      self.server_bind()
-      self.server_activate()
-    embedded_sock_server.EmbeddedSockServer.start(self)
-
 
 def bind_string(bind_address):
   if isinstance(bind_address, basestring):
