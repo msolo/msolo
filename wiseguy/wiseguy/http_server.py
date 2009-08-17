@@ -34,9 +34,14 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
     managed_server.ManagedServer.__init__(self, *pargs, **managed_kargs)
     RequestHandlerClass = kargs.get(
       'RequestHandlerClass', WiseguyRequestHandler)
-    simple_server.WSGIServer.__init__(
-      self, self._server_address, RequestHandlerClass,
-      bind_and_activate=kargs.get('bind_and_activate', True))
+    if sys.version_info >= (2, 6):
+      simple_server.WSGIServer.__init__(
+        self, self._server_address, RequestHandlerClass,
+        bind_and_activate=kargs.get('bind_and_activate', True))
+    else:
+      logging.warning('unable to defer binding, upgrade to Python 2.6')
+      simple_server.WSGIServer.__init__(
+        self, self._server_address, RequestHandlerClass)
     
   def server_bind(self):
     bind_address = self.server_address

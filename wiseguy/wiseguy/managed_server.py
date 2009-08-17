@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import socket
+import sys
 import threading
 
 try:
@@ -94,8 +95,13 @@ class ManagedServer(object):
       self._micro_management_server = None
 
     if self._management_address:
-      self._management_server = self.management_server_class(
-        self._management_address, fcgi_server=self, bind_and_activate=False)
+      if sys.version_info >= (2, 6):
+        self._management_server = self.management_server_class(
+          self._management_address, fcgi_server=self, bind_and_activate=False)
+      else:
+        logging.warning('unable to defer binding, upgrade to Python 2.6')
+        self._management_server = self.management_server_class(
+          self._management_address, fcgi_server=self)
 
     if bind_and_activate:
       self.server_bind()
