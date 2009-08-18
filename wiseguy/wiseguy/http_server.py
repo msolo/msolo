@@ -4,6 +4,7 @@ import select
 import socket
 import string
 import struct
+import sys
 import time
 import urllib
 
@@ -56,7 +57,9 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
           self._drop_privileges_callback()
         fd_client = fd_server.FdClient(self._fd_server.server_address)
         fd = fd_client.get_fd_for_address(self.server_address)
-        self._previous_pid = fd_client.get_pid()
+        self._previous_umgmt_address = fd_client.get_micro_management_address()
+        logging.info('previous micro_management address %s',
+                     self._previous_umgmt_address)
         # reassign the socket for the SocketServer
         # fixme: does it make more sense to do this as a rebindable socket
         # rather than at the server level?

@@ -32,7 +32,18 @@ class FdClient(embedded_sock_server.SocketClient):
     self.send_str(bind_string(bind_address))
     response = self.recv_str()
     if response == 'OK':
-      return _multiprocessing.recvfd(self.socket.fileno())
+      # NOTE: it seems fairly common to get an EGAIN on this read. the
+      # underlying socket is in non-blocking mode, but i'm not sure why this
+      # operation in particular seems to need a retry.
+      for i in xrange(3):
+        try:
+          return _multiprocessing.recvfd(self.socket.fileno())
+        except OSError, e:
+          if e[0] == errno.EAGAIN:
+            time.sleep(0.050)
+          else:
+            raise
+      raise e
     elif response == 'ERROR':
       raise FdClientError(self.recv_str())
     else:
@@ -46,6 +57,13 @@ class FdClient(embedded_sock_server.SocketClient):
       return self.recv_int()
     raise FdClientError('bad response: %r' % response)
 
+  @embedded_sock_server.disconnect_on_completion
+  def get_micro_management_address(self):
+    self.send_str('REQ_UMGMT_ADDR')
+    response = self.recv_str()
+    if response == 'OK':
+      return self.recv_str()
+    raise FdClientError('bad response: %r' % response)
 
 class FdRequestHandler(embedded_sock_server.EmbeddedHandler):
   def handle_REQ_FD(self):
@@ -66,6 +84,10 @@ class FdRequestHandler(embedded_sock_server.EmbeddedHandler):
   def handle_REQ_PID(self):
     self.send_str('OK')
     self.send_int(os.getpid())
+
+  def handle_REQ_UMGMT_ADDR(self):
+    self.send_str('OK')
+    self.send_str(self.server.micro_management_server_address)
 
   def handle_REQ_ADDRS(self):
     self.send_str('OK')
@@ -96,7 +118,8 @@ class FdServer(embedded_sock_server.EmbeddedSockServer):
   fd_map = None
   thread_name = 'fd_server'
   unbind_on_shutdown = False
-
+  micro_management_server_address = ''
+  
   def __init__(self, *pargs, **kargs):
     self.fd_map = {}
     embedded_sock_server.EmbeddedSockServer.__init__(self, *pargs, **kargs)

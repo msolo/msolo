@@ -73,8 +73,9 @@ class ManagedServer(object):
     self._allow_spawning = True
 
     self._management_server = None
-    # the pid of the currently running managed server, if there is one
-    self._previous_pid = None
+    # the address of the umgmt server in the currently running managed server,
+    # if there is one
+    self._previous_umgmt_address = None
     # sometimes multiple threads (management servers) might need to cleanly
     # modify the internal state of the running server.
     self._lock = threading.RLock()
@@ -87,9 +88,13 @@ class ManagedServer(object):
       self._fd_server = fd_server.FdServer(
         self._fd_server_address, fd_server.FdRequestHandler,
         bind_and_activate=False)
+      micro_management_server_address = '%s-%s' % (
+        self._fd_server_address, os.getpid())
       self._micro_management_server = micro_management_server.MicroManagementServer(
-        '%s-%s' % (self._fd_server_address, os.getpid()), self,
-        bind_and_activate=False)
+        micro_management_server_address, self, bind_and_activate=False)
+      # fixme: this feels a bit nasty - passing variables weakly behind the
+      # scenes. all this code feels fragile.
+      self._fd_server.micro_management_server_address = micro_management_server_address
     else:
       self._fd_server = None
       self._micro_management_server = None

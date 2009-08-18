@@ -18,28 +18,43 @@ class FCGIServer(managed_server.ManagedServer):
   @property
   def server_address(self):
     return self._server_address
-  
+
+  @property
+  def socket_type(self):
+    if (isinstance(self._server_address, basestring) and
+        self._server_address.startswith('/')):
+      return socket.AF_UNIX
+    else:
+      return socket.AF_INET
+    
+  def _perform_bind(self):
+    self._listen_socket = socket.socket(self.socket_type, socket.SOCK_STREAM)
+    if self.socket_type == socket.AF_INET:
+      self._listen_socket.setsockopt(
+        socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    self._listen_socket.bind(self.server_address)
+    
   def server_bind(self):
     if self._server_address:
-      if (isinstance(self._server_address, basestring) and
-          self._server_address.startswith('/')):
-        socket_type = socket.AF_UNIX
-      else:
-        socket_type = socket.AF_INET
       try:
-        self._listen_socket = socket.socket(socket_type, socket.SOCK_STREAM)
-        if socket_type == socket.AF_INET:
-          self._listen_socket.setsockopt(
-            socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._listen_socket.bind(self.server_address)
+        self._perform_bind()
       except socket.error, e:
         if e[0] == errno.EADDRINUSE and self._fd_server:
-          fd_client = fd_server.FdClient(self._fd_server.server_address)
-          fd = fd_client.get_fd_for_address(self.server_address)
-          self._previous_pid = fd_client.get_pid()
-          logging.info('previous pid %s', self._previous_pid)
-          self._listen_socket = socket.fromfd(
-            fd, socket_type, socket.SOCK_STREAM)
+          try:
+            fd_client = fd_server.FdClient(self._fd_server.server_address)
+            fd = fd_client.get_fd_for_address(self.server_address)
+            self._previous_umgmt_address = fd_client.get_micro_management_address()
+            logging.info('previous micro_management address %s',
+                         self._previous_umgmt_address)
+            self._listen_socket = socket.fromfd(
+              fd, self.socket_type, socket.SOCK_STREAM)
+          except socket.error, e:
+            if self.socket_type == socket.AF_UNIX:
+              logging.warning('forced teardown on %s', self.server_address)
+              os.remove(self.server_address)
+              self._perform_bind()
+            else:
+              raise
         else:
           raise
       if self._fd_server:

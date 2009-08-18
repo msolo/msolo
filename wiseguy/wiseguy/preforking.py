@@ -342,6 +342,16 @@ class PreForkingMixIn(object):
     # you don't want all your workers to have the same pseudo random order
     # go ahead and reseed it.
     random.seed()
+
+    # the logging module is fun too - it has locks that might be held by a
+    # thread in the parent process. to prevent intermittent deadlock, you need
+    # to reset the locks. this just feels dirty.
+    logging._lock = None
+    logging._acquireLock()
+    for handler in logging._handlers:
+      # this will overwrite the individual locks on each handler
+      handler.createLock()
+    logging._releaseLock()
     
   def _child_request_loop(self):
     while not self._quit:
@@ -362,9 +372,9 @@ class PreForkingMixIn(object):
     # start up. the thinking is that if you start too quickly you will use up
     # too much memory or suddenly swap too many processes that need to do time
     # consuming operations like initialize connections.
-    if self._fd_server and self._previous_pid:
+    if self._fd_server and self._previous_umgmt_address:
       uclient = micro_management_server.MicroManagementClient(
-        '%s-%s' % (self._fd_server.server_address, self._previous_pid))
+        self._previous_umgmt_address)
     else:
       uclient = None
 
