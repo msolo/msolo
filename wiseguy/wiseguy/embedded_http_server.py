@@ -4,6 +4,7 @@ import errno
 import httplib
 import logging
 import select
+import sys
 import threading
 import urllib
 import urlparse
@@ -35,18 +36,23 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
     BaseHTTPServer.HTTPServer.server_activate(self)
     self._activated = True
 
-  def get_request(self):
+  def _get_request_py26(self):
     # Running under Linux the select() call can return, even when there isn't
     # data, so accept() will hang anyway. This of course blows, so do this
-    # as non-blocking temporarily and restor whatever mischief was there to
+    # as non-blocking temporarily and restore whatever mischief was there to
     # begin with. Beginning to wonder if the only reasonable way to do a python
     # web server is with the dreaded asynchat.
+    # this is only required under python26 since get_request was assumed to be
+    # blocking previously.
     old_timeout = self.socket.gettimeout()
     try:
       self.socket.settimeout(0.0)
       return BaseHTTPServer.HTTPServer.get_request(self)
     finally:
       self.socket.settimeout(old_timeout)
+
+  if sys.version_info >= (2, 6):
+    get_request = _get_request_py26
   
   def start(self):
     if not self._bound:
