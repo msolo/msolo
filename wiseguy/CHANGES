@@ -1,3 +1,7 @@
+0.6.3 - fixed another thread start race condition.
+added a graceful shutdown hook for the parent, mostly to clean up turd
+files for the micromanagement socket.
+
 0.6.2 - fix the initialization process a bit. server_bind() only aquires
 resources. server_activate() spawns threads.  to precisely control
 daemonization, you need to have some guarantees about when threads start.

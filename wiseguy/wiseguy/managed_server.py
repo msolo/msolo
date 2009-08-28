@@ -125,6 +125,17 @@ class ManagedServer(object):
     raise NotImplementedError
 
   def server_activate(self):
+    # you need to very precisely control the order of operations here so
+    # that you don't end up trying to negotiate for a port from yourself.
+    # you want to bind all servers first and then start their threads.
+    if self._fd_server:
+      self._fd_server.server_bind()
+    if self._micro_management_server:
+      self._micro_management_server.server_bind()
+    if self._management_server:
+      self._management_server.server_bind()
+
+    # everything should now be bound, start the threads to actually listen
     if self._fd_server:
       logging.debug('start fd_server')
       self._fd_server.start()
@@ -253,6 +264,9 @@ class ManagedServer(object):
     finally:
       os._exit(0)
 
+  def exit_parent(self):
+    if self._micro_management_server:
+      self._micro_management_server.server_unbind()
 
   def close_request(self, req):
     """Run after handle() returns for each connection.

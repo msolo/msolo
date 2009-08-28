@@ -408,4 +408,5 @@ class PreForkingMixIn(object):
       self.manage_children()
     except:
       logging.exception("unhandled exception in manage_children, exitting")
+    self.exit_parent()
 

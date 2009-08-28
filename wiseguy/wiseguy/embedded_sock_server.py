@@ -156,15 +156,18 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
     self.shutdown()
     self.thread.join(self.teardown_timeout)
     if self.unbind_on_shutdown:
-      try:
-        os.remove(self.server_address)
-        logging.debug('removed %s', self.server_address)
-      except EnvironmentError, e:
-        logging.error('error removing %s', self.server_address)
+      self.server_unbind()
 
   def server_bind(self):
     SocketServer.UnixStreamServer.server_bind(self)
     self._bound = True
+
+  def server_unbind(self):
+    try:
+      os.remove(self.server_address)
+      logging.debug('removed %s', self.server_address)
+    except EnvironmentError, e:
+      logging.error('error removing %s', self.server_address)
 
   def server_activate(self):
     SocketServer.UnixStreamServer.server_activate(self)

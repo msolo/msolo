@@ -84,7 +84,7 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
   def server_activate(self):
     simple_server.WSGIServer.server_activate(self)
     managed_server.ManagedServer.server_activate(self)
-    
+
   def close_request(self, request):
     simple_server.WSGIServer.close_request(self, request)
     managed_server.ManagedServer.close_request(self, request)    
