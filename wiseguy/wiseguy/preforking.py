@@ -375,6 +375,17 @@ class PreForkingMixIn(object):
     if self._fd_server and self._previous_umgmt_address:
       uclient = micro_management_server.MicroManagementClient(
         self._previous_umgmt_address)
+      try:
+        # try to shutdown the pre-exisiting fd_server at this point
+        # coupled with the unlock_startup() call below, this prevents a
+        # race between multiple processes vying for copies of the active
+        # file descriptors. the reason for doing this at such a late stage
+        # is that by this point, you are virtually certain that the new
+        # process tree should function correctly and can sustain a subsequent
+        # restart event.
+        uclient.fd_server_shutdown()
+      except Exception, e:
+        logging.warning('fd_server_shutdown failed: %s', e)
     else:
       uclient = None
 
@@ -404,6 +415,7 @@ class PreForkingMixIn(object):
         logging.warning('graceful_shutdown failed: %s', e)
       
     self.install_parent_signals()
+    self.unlock_startup()
     try:
       self.manage_children()
     except:

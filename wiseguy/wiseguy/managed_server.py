@@ -1,4 +1,5 @@
 import errno
+import fcntl
 import logging
 import os
 import signal
@@ -79,6 +80,7 @@ class ManagedServer(object):
     # sometimes multiple threads (management servers) might need to cleanly
     # modify the internal state of the running server.
     self._lock = threading.RLock()
+    self._fd_server_lock_fd = None
 
     if fd_server and self._fd_server_address:
       # create the instance, but don't start it up just yet
@@ -112,6 +114,37 @@ class ManagedServer(object):
       self.server_bind()
       self.server_activate()
 
+  def lock_startup(self):
+    # we only need a lock when we are using the fd_server
+    # the reason we need this is to keep multiple processes that are starting
+    # up race for a connection to the existing fd_server. this is definitely
+    # not the most elegant, but it should reliably keep multiple process trees
+    # from setting up shop simultaneously
+    if self._fd_server_address:
+      if self._fd_server_lock_fd is None:
+        self._fd_server_lock_fd = os.open(self._fd_server_address + '.lock',
+                                          os.O_CREAT | os.O_WRONLY)
+      # use fcntl lock instead of flock because flock is held through a fork()
+      try:
+        # do a non-blocking check for the sole purpose of showing a warning
+        # message to the hapless user
+        fcntl.lockf(self._fd_server_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+      except IOError, e:
+        if e[0] in (errno.EACCES, errno.EAGAIN):
+          # the lock is held, dump a warning and wait
+          logging.warning("waiting for startup lock")
+          fcntl.lockf(self._fd_server_lock_fd, fcntl.LOCK_EX)
+          logging.warning("acquired startup lock")
+        else:
+          raise
+
+  def unlock_startup(self):
+    logging.info('unlock_startup')
+    if self._fd_server_lock_fd is not None:
+      # don't delete the lock file - it's easier to manage the locks on an
+      # existing file
+      os.close(self._fd_server_lock_fd)
+
   @property
   def child_pids(self):
     """Return an immutable, consistent copy of the current child pids."""
@@ -120,7 +153,7 @@ class ManagedServer(object):
       return tuple(self._child_pids)
     finally:
       self._lock.release()
-  
+
   def server_bind(self):
     raise NotImplementedError
 
@@ -364,6 +397,12 @@ class ManagedServer(object):
       os.kill(pid, signal.SIGTERM)
     except:
       logging.exception("handle_server_profile")
+
+  def handle_fd_server_shutdown(self):
+    # this comes from the micromanagement server telling this process that the
+    # new process tree is ready to take sole ownership of the fd_server socket
+    if self._fd_server:
+      self._fd_server.shutdown()
 
 
 def compute_memory_delta(mem_stats1, mem_stats2):

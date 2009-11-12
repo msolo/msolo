@@ -11,6 +11,18 @@ class MicroManagementError(embedded_sock_server.ClientError):
 
 class MicroManagementClient(embedded_sock_server.SocketClient):
   @embedded_sock_server.disconnect_on_completion
+  def fd_server_shutdown(self):
+    self.send_str('fd_server_shutdown')
+    response = self.recv_str()
+    if response == 'OK':
+      pass
+    elif response == 'ERROR':
+      error_str = self.recv_str()
+      raise MicroManagementError(error_str)
+    else:
+      raise MicroManagementError('bad response %r' % response)
+
+  @embedded_sock_server.disconnect_on_completion
   def prune_worker(self):
     self.send_str('prune_worker')
     response = self.recv_str()
@@ -36,6 +48,16 @@ class MicroManagementClient(embedded_sock_server.SocketClient):
 
 
 class MicroManagementHandler(embedded_sock_server.EmbeddedHandler):
+  def handle_fd_server_shutdown(self):
+    try:
+      logging.info('handle_fd_server_shutdown')
+      self.server.fcgi_server.handle_fd_server_shutdown()
+      self.send_str('OK')
+    except Exception, e:
+      logging.exception('handle_fd_server_shutdown')
+      self.send_str('ERROR')
+      self.send_str(str(e))
+  
   def handle_prune_worker(self):
     try:
       logging.info('handle_prune_worker')

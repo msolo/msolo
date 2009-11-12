@@ -45,6 +45,7 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
         self, self._server_address, RequestHandlerClass)
     
   def server_bind(self):
+    self.lock_startup()
     bind_address = self.server_address
     try:
       simple_server.WSGIServer.server_bind(self)
@@ -82,6 +83,7 @@ class HTTPServer(simple_server.WSGIServer, managed_server.ManagedServer):
     logging.debug('bound %s', self)
 
   def server_activate(self):
+    self.lock_startup()
     simple_server.WSGIServer.server_activate(self)
     managed_server.ManagedServer.server_activate(self)
 

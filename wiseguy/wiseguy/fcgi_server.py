@@ -35,6 +35,7 @@ class FCGIServer(managed_server.ManagedServer):
     self._listen_socket.bind(self.server_address)
     
   def server_bind(self):
+    self.lock_startup()
     if self._server_address:
       try:
         self._perform_bind()
@@ -63,6 +64,7 @@ class FCGIServer(managed_server.ManagedServer):
         logging.info('registered fd %s %s', self.server_address, bound_fd)
 
   def server_activate(self):
+    self.lock_startup()
     if self._listen_socket:
       # NOTE: does listening with too much backlog break FIFO queuing? does this mean
       # a slow worker will make some requests wait unfairly?

@@ -189,7 +189,9 @@ class EmbeddedSockServer(SocketServer.UnixStreamServer):
           continue
         else:
           raise
-      if ready_rfds:
+      # double check the variable here in case we tried to shutdown
+      # in a shorter time than poll_interval (likely)
+      if ready_rfds and self._BaseServer__serving:
         try:
           self._handle_request_noblock()
         except:
