@@ -23,7 +23,7 @@ class PreForkingMixIn(object):
   signal_list = (signal.SIGTERM, signal.SIGINT, signal.SIGALRM,
                  signal.SIGHUP)
   alarm_interval = None
-  check_interval = 30
+  check_interval = 1
   rss_check_interval = 30
   
   def parent_signal_handler(self, signalnum, stack_frame):
