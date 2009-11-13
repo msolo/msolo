@@ -25,6 +25,7 @@ class PreForkingMixIn(object):
   alarm_interval = None
   check_interval = 1
   rss_check_interval = 30
+  last_rss_check_time = 0
   
   def parent_signal_handler(self, signalnum, stack_frame):
     if signalnum != signal.SIGALRM:
@@ -91,6 +92,10 @@ class PreForkingMixIn(object):
     # FIXME: might want to fork off this new children first, presuming
     # there are resources to do so, then kill the unruly children. this
     # might result in smoother response times
+    if (self.last_rss_check_time and
+        self.last_rss_check_time + self.rss_check_interval < time.time()):
+      return
+      
     if not self._quit and self._max_rss and self._allow_spawning:
       for pid in self.child_pids:
         try:
@@ -103,6 +108,7 @@ class PreForkingMixIn(object):
           os.kill(pid, signal.SIGTERM)
           # fixme: sigterm is ok for now, but we might need to escalate to a
           # sigkill at some point
+      self.last_rss_check_time = time.time()
 
   def manage_children(self):
     # NOTE: this code looks a little fishy to me, too much sharing of data

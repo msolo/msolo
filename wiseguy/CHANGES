@@ -4,6 +4,10 @@ procedure due to a rather course file lock. this limits you to about one
 restart in n seconds, where n is directly dependent on how long it takes the
 underlying server to perform its startup.
 
+reduced check_interval to make the parent more responsive to dead children.
+finally implemented the separate rss check interval so we don't spend all
+our time finding out how much memory we are using.
+
 0.6.3 - fixed another thread start race condition.
 added a graceful shutdown hook for the parent, mostly to clean up turd
 files for the micromanagement socket.
