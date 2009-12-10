@@ -1,3 +1,6 @@
+0.6.5 - fixed error in startup locking that was still allowing a small race
+window.
+
 0.6.4 - fixed the remaining race condition when multiple new processes vy for
 cloned file descriptors. only one process at a time can go through the startup 
 procedure due to a rather course file lock. this limits you to about one
