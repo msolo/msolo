@@ -347,7 +347,7 @@ class ManagedServer(object):
 
   def init_profile_memory(self):
     # fixme: ugly hack to handle cyclic dependency
-    from wiseguy.preforking import get_memory_usage, MemoryException
+    from wiseguy.resource_manager import get_memory_usage, MemoryException
     try:
       self._mem_stats = get_memory_usage(os.getpid())
     except MemoryException, e:
@@ -355,7 +355,7 @@ class ManagedServer(object):
     
   def handle_profile_memory(self, req):
     # fixme: ugly hack to handle cyclic dependency
-    from wiseguy.preforking import get_memory_usage, MemoryException
+    from wiseguy.resource_manager import get_memory_usage, MemoryException
     try:
       current_mem_stats = get_memory_usage(os.getpid())
     except MemoryException, e:
