@@ -46,7 +46,7 @@ class PreForkingMixIn(object):
       # in most cases, you need to resend the signal to the child pids
       # however, this doesn't seem to be true with SIGINT, it looks like
       # there might be some python magic going on
-      os.kill(pid, signalnum)
+      _kill(pid, signalnum)
 
       # NOTE: the fastcgi library installs a handler to break
       # on a SIGUSR1 - hopefully this will force the other signal
@@ -105,7 +105,7 @@ class PreForkingMixIn(object):
           continue
         if rss > self._max_rss:
           logging.info('kill child pid: %s, rss: %s', pid, rss)
-          os.kill(pid, signal.SIGTERM)
+          _kill(pid, signal.SIGTERM)
           # fixme: sigterm is ok for now, but we might need to escalate to a
           # sigkill at some point
       self.last_rss_check_time = time.time()
@@ -189,9 +189,9 @@ class PreForkingMixIn(object):
       #if not workers or i < workers:
       #  self.spawn_child()
       if force:
-        os.kill(pid, signal.SIGKILL)
+        _kill(pid, signal.SIGKILL)
       else:
-        os.kill(pid, signal.SIGTERM)
+        _kill(pid, signal.SIGTERM)
       if skew:
         time.sleep(skew)
 
@@ -209,7 +209,7 @@ class PreForkingMixIn(object):
     finally:
       self._lock.release()
     if pid is not None:
-      os.kill(pid, signal.SIGTERM)
+      _kill(pid, signal.SIGTERM)
 
   # NOTE: THREADED this executes in another thread. there are shared variables
   # that get modified, but this shouldn't cause a problem since we mostly
@@ -221,23 +221,21 @@ class PreForkingMixIn(object):
     Each worker should terminate gracefully, as should the parent."""
     self.graceful_shutdown()
 
-    timer = threading.Timer(5.0, self.graceful_shutdown)
-    timer.setDaemon(True)
-    timer.start()
-
     # schedule some insurance - if this thread is still alive in 30 seconds,
     # send SIGKILL to the children and let the parent tear down nicely.
     timer = threading.Timer(30.0, self.force_shutdown)
     timer.setDaemon(True)
     timer.start()
 
-  def graceful_shutdown(self):
+  def _send_signal(self, signo):
     for pid in self.child_pids:
-      os.kill(pid, signal.SIGTERM)
+      _kill(pid, signo)
+  
+  def graceful_shutdown(self):
+    self._send_signal(signal.SIGTERM)
 
   def force_shutdown(self):
-    for pid in self.child_pids:
-      os.kill(pid, signal.SIGKILL)
+    self._send_signal(signal.SIGKILL)
 
   # FIXME: this is kind of dopey the way we have to send back an http-like
   # response. should this be only in the management_server?
@@ -363,13 +361,7 @@ class PreForkingMixIn(object):
     while not self._quit:
       try:
         self.handle_request()
-      except select.error, e:
-        if e[0] == errno.EINTR:
-          # squelch some noise
-          pass
-        else:
-          raise
-      except IOError, e:
+      except (select.error, IOError), e:
         self._handle_io_error(e)
 
   def serve_forever(self):
@@ -428,3 +420,13 @@ class PreForkingMixIn(object):
       logging.exception("unhandled exception in manage_children, exitting")
     self.exit_parent()
 
+def _kill(pid, signo):
+  try:
+    os.kill(pid, signo)
+  except OSError, e:
+    if e[0] in (errno.ESRCH,):
+      pass
+    else:
+      logging.warning("can't send signal %s to pid %s (%s)", signo, pid, e)
+  except:
+    logging.exception("can't send signal")

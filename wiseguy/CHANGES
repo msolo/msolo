@@ -1,3 +1,6 @@
+0.6.6 - fixed an error where sending a signal raised an exception.
+fixed handling of EINTR during the initial select() call for handle_one_request
+
 0.6.5 - fixed error in startup locking that was still allowing a small race
 window.
 

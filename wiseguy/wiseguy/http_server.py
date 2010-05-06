@@ -218,12 +218,18 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
     return self.client_address[0]
 
   def handle(self):
+    # this is basically a garbage value - most of the time it should be
+    # overwritten in handle_one_request
+    self.start_time = time.time()
+    
     # override handle() so we deal with keep-alive connections.
     # fixme: is this a bug in simple_server.WSGIRequestHandler??
     try:
       self.handle_one_request()
       while not self.close_connection:
         self.handle_one_request()
+    except select.error, e:
+      raise
     except IOError, e:
       elapsed = time.time() - self.start_time
       logging.warning('%s "%s" %s %8.6f',
@@ -240,6 +246,7 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
       logging.debug('%s closing idle connection', self.address_string())
       self.close_connection = True
       return
+
     self.start_time = time.time()
     try:
       self.raw_requestline = self.rfile.readline()
