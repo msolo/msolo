@@ -40,6 +40,18 @@ class ManagementServer(embedded_http_server.EmbeddedHTTPServer):
         fd_client = fd_server.FdClient(self.fd_server.server_address)
         fd = fd_client.get_fd_for_address(self.server_address)
         self.socket = socket.fromfd(fd, socket.AF_INET, socket.SOCK_STREAM)
+
+        # clear out any backlog that's hanging around
+        self.socket.setblocking(False)
+        while True:
+          try:
+            junk_sock, junk_addr = self.socket.accept()
+            logging.info('dropping backlogged connection %s', junk_addr)
+            junk_sock.close()
+          except socket.error, e:
+            break
+        self.socket.setblocking(True)
+        
         # have to replicate this code from the base class when you rebind
         host, port = self.socket.getsockname()[:2]
         self.server_name = socket.getfqdn(host)

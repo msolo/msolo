@@ -16,6 +16,7 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
   allow_reuse_address = True
   server_version = 'wiseguy/' + wiseguy.__version__
   teardown_timeout = 2.0
+
   _bound = False
   _activated = False
   
@@ -47,13 +48,18 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
     old_timeout = self.socket.gettimeout()
     try:
       self.socket.settimeout(0.0)
-      return BaseHTTPServer.HTTPServer.get_request(self)
+      sock, addr = BaseHTTPServer.HTTPServer.get_request(self)
+      # Set a timeout on the underlying client socket. Even on the management
+      # servers, there are malicious clients. It's a jungle out there.
+      sock.settimeout(self.timeout)
+      return (sock, addr)
     finally:
       self.socket.settimeout(old_timeout)
 
   if sys.version_info >= (2, 6):
     get_request = _get_request_py26
-  
+
+        
   def start(self):
     if not self._bound:
       self.server_bind()
@@ -63,6 +69,8 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
       target=self.serve_forever, name=self.thread_name)
     self._thread.setDaemon(True)
     self._thread.start()    
+
+
 
   def stop(self):
     self._quit = True
@@ -98,8 +106,10 @@ class EmbeddedRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     '/': 'handle_default',
   }
 
+  read_timeout = 5.0
   response_code = httplib.OK
   content_type = 'text/plain; charset=utf-8'
+
 
   @classmethod
   def register_handler(cls, url, function):
@@ -127,6 +137,14 @@ class EmbeddedRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     except (KeyError, IndexError), e:
       return default
 
+  def handle_one_request(self):
+    ready_read, ready_write, ready_errors = select.select(
+      [self.connection], [], [self.connection], self.read_timeout)
+    if ready_read:
+      return BaseHTTPServer.BaseHTTPRequestHandler.handle_one_request(self)
+    else:
+      logging.error('handle_one_request error %s', self.client_address)
+    
   def do_GET(self):
     scheme, netloc, path, query, fragment = urlparse.urlsplit(self.path)
     self.form = cgi.parse_qs(query, keep_blank_values=True)

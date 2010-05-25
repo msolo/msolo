@@ -1,3 +1,6 @@
+0.6.7 - added a timeout for the embedded server to prevent clients for hanging
+indefinitely.
+
 0.6.6 - fixed an error where sending a signal raised an exception.
 fixed handling of EINTR during the initial select() call for handle_one_request
 
