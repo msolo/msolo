@@ -6,6 +6,7 @@ import string
 import struct
 import sys
 import time
+import traceback
 import urllib
 
 from wsgiref import simple_server
@@ -116,6 +117,13 @@ class WiseguyWSGIHandler(simple_server.ServerHandler):
     # force the connection to get torn down
     self.request_handler.close_connection = True
 
+  def error_output(self, environ, start_response):
+    start_response(self.error_status, self.error_headers[:], sys.exc_info())
+    if self.request_handler.debug:
+      return [traceback.format_exc()]
+    else:
+      return [self.error_body]
+
   @property
   def http_version(self):
     return self.request_handler.http_version
@@ -182,6 +190,7 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
   request_count = 0
   start_time = None
   raw_requestline = None
+  debug = False
   # how long will we wait after accepting a connection or processing a request
   # before we return to the accept() loop
   keepalive_timeout = 5.0
