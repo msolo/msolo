@@ -1,0 +1,6 @@
+Fixes:
+ * dopey to have 1 map on disk and 1 in memory each slightly different
+ * store the bigger map by default, maybe allow shipping a 'stripped' index?
+ * clean up logic for incremental update
+ * do more methods belong on the instance?
+ 

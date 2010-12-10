@@ -1,0 +1,5 @@
+0.7 - added switch to allow using mtime instead of svn revision for versioning
+
+0.5 - enabled incremental build - svn is just too slow to query every time. indexes are backward compatible by default.
+
+0.4 - stable production release

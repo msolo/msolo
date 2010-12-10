@@ -1,0 +1,89 @@
+#!/usr/local/bin/python
+
+import logging
+import os
+import os.path
+import subprocess
+import sys
+
+from optparse import OptionParser, OptionValueError
+
+import vfl
+
+def read_pipe(cmd):
+    proc = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
+    return proc.communicate()[0]
+
+def main(options, args):
+    site_root = os.path.abspath(options.site_root)
+
+    data_file = open(options.output_file, 'w')
+    if options.prepend:
+        for text in options.prepend:
+            data_file.write(text + '\n')
+    deps_path = vfl.get_dependency_path(options.output_file)
+    deps_file = open(deps_path, 'w')
+    
+    for path in args:
+        # if this looks relative, just resolve the whole thing and then
+        # figure out its site-relative path
+        if path.startswith('.'):
+            path = os.path.abspath(path)
+        else:
+            path = vfl.get_absolute_path(site_root, path)
+        site_relative_path = vfl.get_site_relative_path(site_root, path)
+
+        dependency_comment = vfl.format_dependency_comment(site_relative_path)
+        dependency_comment += '\n'
+        deps_file.write(dependency_comment)
+
+        f = open(path)
+        data_file.write(dependency_comment)
+        data_file.write(f.read())
+        f.close()
+        
+    deps_file.close()
+    data_file.close()
+
+
+if __name__ == '__main__':
+
+    def validate_file(option, opt_str, value, parser):
+        value = os.path.expanduser(value)
+        setattr(parser.values, option.dest, value)
+
+    def comma_list(option, opt_str, value, parser):
+        value = [s.strip() for s in value.split(',')]
+        setattr(parser.values, option.dest, value)
+
+    def validate_log_level(option, opt_str, value, parser):
+        try:
+            log_level = logging.getLevelName(value.upper())
+            setattr(parser.values, option.dest, int(log_level))
+        except ValueError:
+            raise OptionValueError("%s error, unknown log level: %s" %
+                                   (opt_str, value))
+
+    option_parser = OptionParser()
+    option_parser.add_option('-v', dest='verbose', default=False,
+                             action='store_true')
+    option_parser.add_option('--prepend',
+                             action='append',
+                             help="prepend a string to the output file")
+    option_parser.add_option('-o', '--output-file', dest='output_file',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="squished output file")
+    option_parser.add_option('--site-root',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="the directory mapped to / on the web host")
+    option_parser.add_option("--log-level", default=logging.INFO,
+                             action="callback", callback=validate_log_level,
+                             type="str", nargs=1,
+                             help="set the base log level")
+    
+    (options, args) = option_parser.parse_args()
+    logging.basicConfig(level=options.log_level)
+    
+    main(options, args)

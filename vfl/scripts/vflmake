@@ -1,0 +1,116 @@
+#!/usr/local/bin/python
+
+import logging
+
+import vfl
+
+def main(options):
+    _vfl = vfl.VersionedFileLayout(
+        versioned_filename_format=options.name_format,
+        versioned_filename_pattern=options.version_pattern,
+        new_index_format=options.new_index_format,
+        version_by_mtime=options.version_by_mtime,
+        fallback_to_mtime=options.fallback_to_mtime)
+    try:
+        if options.index_file:
+            _vfl.load_index(options.index_file)
+    except Exception:
+        logging.warning('rebuilding index, unable to read %s',
+                        options.index_file)
+    _vfl.build_versioned_tree(options.svn_dir, options.versioned_dir,
+                              options.index_file, options.max_revisions,
+                              options.exclude_list, options.url_prefix)
+    
+
+    
+
+if __name__ == '__main__':
+    from optparse import OptionParser, OptionValueError
+    import os
+    import os.path
+    import sys
+
+    def validate_file(option, opt_str, value, parser):
+        value = os.path.expanduser(value)
+        setattr(parser.values, option.dest, value)
+
+    def comma_list(option, opt_str, value, parser):
+        value = [s.strip() for s in value.split(',')]
+        setattr(parser.values, option.dest, value)
+
+    def validate_log_level(option, opt_str, value, parser):
+        try:
+            log_level = logging.getLevelName(value.upper())
+            setattr(parser.values, option.dest, int(log_level))
+        except ValueError:
+            raise OptionValueError("%s error, unknown log level: %s" %
+                                   (opt_str, value))
+
+    option_parser = OptionParser()
+    option_parser.add_option('-v', dest='verbose', default=False,
+                             action='store_true')
+    option_parser.add_option('--svn-dir',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="an svn dir to recurse through")
+    option_parser.add_option('--version-by-mtime', default=False,
+                             action='store_true',
+                             help='use mtime instead of revision number')
+    option_parser.add_option('--fallback-to-mtime', default=False,
+                             action='store_true',
+                             help='use mtime if no revision number is found')
+    option_parser.add_option('--versioned-dir',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="a target for versioned file tree")
+    option_parser.add_option('--index-file',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="write an index file")
+    option_parser.add_option('--max-revisions',
+                             type='int', nargs=1, default=3,
+                             help="max number of revisions to keep on disk")
+    option_parser.add_option('--name-format',
+                             default=vfl.default_filename_format,
+                             help="versioned name format, default: '%s'" %
+                             vfl.default_filename_format)
+    option_parser.add_option('--url-prefix',
+                             default='',
+                             help="url-prefix, default: ''")
+    option_parser.add_option('--version-pattern',
+                             default=vfl.default_filename_pattern,
+                             help="versioned regex, default: '%s'" %
+                             vfl.default_filename_pattern)
+    option_parser.add_option('--exclude-list',
+                             action='callback', callback=comma_list,
+                             type='str', nargs=1,
+                             help="an comma delimited list of directories to skip")
+    option_parser.add_option("--log-level", default=logging.INFO,
+                             action="callback", callback=validate_log_level,
+                             type="str", nargs=1,
+                             help="set the base log level")
+    option_parser.add_option('--x-profile', dest='profile', default=False,
+                             action='store_true',
+                             help='turn on hotshot')
+    option_parser.add_option('--new-index-format', default=False,
+                             action='store_true',
+                             help='use more logical index format')
+    
+    (options, args) = option_parser.parse_args()
+    logging.basicConfig(level=options.log_level)
+    if not (options.svn_dir and options.versioned_dir):
+        print >> sys.stderr, 'must specify --svn-dir and --versioned-dir'
+        sys.exit(1)
+
+    
+    if options.profile:
+        import hotshot
+        path = os.path.join(
+            '/tmp',
+            '%s-%u.hotshot' % (os.path.basename(sys.argv[0]),
+                               os.getpid()))
+        
+        profile = hotshot.Profile(path)
+        profile.runcall(main, options)
+    else:
+        main(options)
