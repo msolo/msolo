@@ -1,0 +1,97 @@
+#!/usr/local/bin/python
+
+"""
+This is basically a horrible hack to convert the calcdeps.py output
+into something vfl can interpret.
+"""
+
+import logging
+import os
+import os.path
+import subprocess
+import sys
+
+from optparse import OptionParser, OptionValueError
+
+import vfl
+
+def read_pipe(cmd):
+    proc = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
+    return proc.communicate()[0]
+
+def main(options, args):
+    site_root = os.path.abspath(options.site_root)
+
+    def make_dep_file(target, dep_list):
+        #print "make_dep_file:", target, dep_list
+        deps_path = vfl.get_dependency_path(target)
+        deps_file = open(deps_path, 'w')
+
+        for path in dep_list:
+            # if this looks relative, just resolve the whole thing and then
+            # figure out its site-relative path
+            if path.startswith('.'):
+                path = os.path.abspath(path)
+            else:
+                path = vfl.get_absolute_path(site_root, path)
+            site_relative_path = vfl.get_site_relative_path(site_root, path)
+
+            dependency_comment = vfl.format_dependency_comment(site_relative_path)
+            dependency_comment += '\n'
+            deps_file.write(dependency_comment)
+
+        deps_file.close()
+
+    src_deps_file = open(options.src_deps_file)
+    for line in src_deps_file:
+        dep_pieces = line.split()
+        target = dep_pieces[0].strip().rstrip(':')
+        dep_list = []
+        for dep_path in dep_pieces[1:]:
+            if (dep_path.strip().startswith('/usr/local/share/google3') or
+                dep_path.strip().startswith('/usr/local/youtube/share/google3')):
+                # fixme: skip for now
+                continue
+            # append a dot-slash here to trick the dependency system to specify absolute urls
+            dep_list.append('./' + dep_path)
+        make_dep_file(target, dep_list)
+
+
+if __name__ == '__main__':
+
+    def validate_file(option, opt_str, value, parser):
+        value = os.path.expanduser(value)
+        setattr(parser.values, option.dest, value)
+
+    def comma_list(option, opt_str, value, parser):
+        value = [s.strip() for s in value.split(',')]
+        setattr(parser.values, option.dest, value)
+
+    def validate_log_level(option, opt_str, value, parser):
+        try:
+            log_level = logging.getLevelName(value.upper())
+            setattr(parser.values, option.dest, int(log_level))
+        except ValueError:
+            raise OptionValueError("%s error, unknown log level: %s" %
+                                   (opt_str, value))
+
+    option_parser = OptionParser()
+    option_parser.add_option('-v', dest='verbose', default=False,
+                             action='store_true')
+    option_parser.add_option('--src-deps-file',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="file to create dependencies from")
+    option_parser.add_option('--site-root',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="the directory mapped to / on the web host")
+    option_parser.add_option("--log-level", default=logging.INFO,
+                             action="callback", callback=validate_log_level,
+                             type="str", nargs=1,
+                             help="set the base log level")
+    
+    (options, args) = option_parser.parse_args()
+    logging.basicConfig(level=options.log_level)
+    
+    main(options, args)

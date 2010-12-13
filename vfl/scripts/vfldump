@@ -1,0 +1,44 @@
+#!/usr/local/bin/python
+
+import logging
+import pickle
+import pprint
+
+def main(options):
+    if not options.index_file:
+        logging.fatal('no index file')
+
+    index = pickle.load(open(options.index_file))
+    pprint.pprint(index)
+
+if __name__ == '__main__':
+    from optparse import OptionParser, OptionValueError
+    import os.path
+    import sys
+
+    def validate_file(option, opt_str, value, parser):
+        value = os.path.expanduser(value)
+        setattr(parser.values, option.dest, value)
+
+    def validate_log_level(option, opt_str, value, parser):
+        try:
+            log_level = logging.getLevelName(value.upper())
+            setattr(parser.values, option.dest, int(log_level))
+        except ValueError:
+            raise OptionValueError("%s error, unknown log level: %s" %
+                                   (opt_str, value))
+
+    option_parser = OptionParser()
+    option_parser.add_option('-v', dest='verbose', default=False,
+                             action='store_true')
+    option_parser.add_option('--index-file',
+                             action='callback', callback=validate_file,
+                             type='str', nargs=1,
+                             help="write an index file")
+    option_parser.add_option("--log-level", default=logging.INFO,
+                             action="callback", callback=validate_log_level,
+                             type="str", nargs=1,
+                             help="set the base log level")
+    (options, args) = option_parser.parse_args()
+    logging.basicConfig(level=options.log_level)
+    main(options)

@@ -5,23 +5,26 @@ import logging
 import vfl
 
 def main(options):
+
     _vfl = vfl.VersionedFileLayout(
         versioned_filename_format=options.name_format,
         versioned_filename_pattern=options.version_pattern,
-        new_index_format=options.new_index_format,
-        version_by_mtime=options.version_by_mtime,
-        fallback_to_mtime=options.fallback_to_mtime)
+        new_index_format=options.new_index_format)
+
     try:
         if options.index_file:
             _vfl.load_index(options.index_file)
+        # fixme: another horrible hack
+        # make the tool go through the process of parsing out the index
+        if options.force_rebuild:
+            _vfl.last_mtime_indexed = 1
     except Exception:
         logging.warning('rebuilding index, unable to read %s',
                         options.index_file)
     _vfl.build_versioned_tree(options.svn_dir, options.versioned_dir,
                               options.index_file, options.max_revisions,
-                              options.exclude_list, options.url_prefix)
-    
-
+                              options.exclude_list, options.exclude_suffixes,
+                              options.url_prefix)
     
 
 if __name__ == '__main__':
@@ -53,12 +56,9 @@ if __name__ == '__main__':
                              action='callback', callback=validate_file,
                              type='str', nargs=1,
                              help="an svn dir to recurse through")
-    option_parser.add_option('--version-by-mtime', default=False,
+    option_parser.add_option('--force-rebuild', default=False,
                              action='store_true',
-                             help='use mtime instead of revision number')
-    option_parser.add_option('--fallback-to-mtime', default=False,
-                             action='store_true',
-                             help='use mtime if no revision number is found')
+                             help='ignore previous build-time and reindex')
     option_parser.add_option('--versioned-dir',
                              action='callback', callback=validate_file,
                              type='str', nargs=1,
@@ -85,6 +85,10 @@ if __name__ == '__main__':
                              action='callback', callback=comma_list,
                              type='str', nargs=1,
                              help="an comma delimited list of directories to skip")
+    option_parser.add_option('--exclude-suffixes',
+                             action='callback', callback=comma_list,
+                             type='str', nargs=1,
+                             help="an comma delimited list of files suffixes to skip")
     option_parser.add_option("--log-level", default=logging.INFO,
                              action="callback", callback=validate_log_level,
                              type="str", nargs=1,
