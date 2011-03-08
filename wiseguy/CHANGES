@@ -1,3 +1,10 @@
+0.6.10 - fix (hopefully) deadlock on shutdown caused by the embedded server
+writing to an undrained stdout and prevent proper thread teardown.
+
+0.6.9 - fix graceful shutdown and make killing more verbose
+
+0.6.8 - added better handling for a RST event when sockets are in NOLINGER
+
 0.6.7 - added a timeout for the embedded server to prevent clients for hanging
 indefinitely.
 

@@ -239,14 +239,12 @@ class WiseguyRequestHandler(simple_server.WSGIRequestHandler):
         self.handle_one_request()
     except select.error, e:
       raise
-    except IOError, e:
-      elapsed = time.time() - self.start_time
-      logging.warning('%s "%s" %s %8.6f',
-                      self.address_string(), self.raw_requestline, e, elapsed)
     except Exception, e:
       elapsed = time.time() - self.start_time
-      logging.exception('http error %s "%s" %s %s',
-         self.address_string(), self.raw_requestline, e, elapsed)
+      # Ignore ECONNRESET, we expect this from clients in NOLINGER mode
+      if not (isinstance(e, socket.error) and e[0] == errno.ECONNRESET):
+        logging.exception('http error %s "%s" %s %s',
+                          self.address_string(), self.raw_requestline, e, elapsed)
 
   def handle_one_request(self):
     ready_rfds, ready_wfds, ready_xfds = select.select(

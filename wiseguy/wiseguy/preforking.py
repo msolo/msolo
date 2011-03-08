@@ -232,6 +232,7 @@ class PreForkingMixIn(object):
       _kill(pid, signo)
   
   def graceful_shutdown(self):
+    self._quit = True
     self._send_signal(signal.SIGTERM)
 
   def force_shutdown(self):
@@ -422,6 +423,7 @@ class PreForkingMixIn(object):
 
 def _kill(pid, signo):
   try:
+    logging.info('send kill pid: %s signo: %s', pid, signo)
     os.kill(pid, signo)
   except OSError, e:
     if e[0] in (errno.ESRCH,):

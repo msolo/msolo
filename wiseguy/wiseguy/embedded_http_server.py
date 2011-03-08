@@ -81,6 +81,9 @@ class EmbeddedHTTPServer(BaseHTTPServer.HTTPServer):
     finally:
       self._thread.join(self.teardown_timeout)
 
+  def handle_error(self, request, client_address):
+    logging.exception('error during request from %s', client_address)
+
   def serve_forever(self):
     try:
       logging.info('started %s', self)
