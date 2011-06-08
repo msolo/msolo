@@ -71,18 +71,13 @@ else:
 # make hotshot/profile/cProfile work the same way by selectively wrapping
 # certain classes with a proxy
 def get_profiler(profiler_module, path, bias=None):
-  if profiler_module == 'hotshot':
-    import hotshot
-    prof = hotshot.Profile(path)
-    setattr(prof, 'filename', path)
-    return prof
-  elif profiler_module == 'profile':
-    import profile
-    prof = profile.Profile(bias=bias)
-    return PureProfileProxy(path, prof)
-  elif profiler_module == 'cProfile':
+  if profiler_module == 'cProfile':
     import cProfile
     prof = cProfile.Profile()
+    return ProfileProxy(path, prof)
+  elif profiler_module == 'cpuprofile':
+    import cpuprofile
+    prof = cpuprofile.Profile()
     return ProfileProxy(path, prof)
 
 class ProfileProxy(object):
@@ -95,10 +90,3 @@ class ProfileProxy(object):
 
   def close(self):
     self.profile.dump_stats(self.filename)
-
-class PureProfileProxy(ProfileProxy):
-  def runcall(self, *pargs, **kargs):
-    result = self.profile.runcall(*pargs, **kargs)
-    # need this call to reset the profiler
-    self.profile.create_stats()
-    return result

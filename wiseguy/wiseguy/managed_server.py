@@ -28,7 +28,7 @@ class ManagedServer(object):
                workers=5, max_requests=None,
                max_rss=None, profile_path=None, profile_uri=None,
                profile_memory=False, accept_input_timeout=0,
-               profiler_module='hotshot',
+               profiler_module='cProfile',
                bind_and_activate=True,
                fd_server_address=None,
                drop_privileges_callback=None,
