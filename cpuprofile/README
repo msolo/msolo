@@ -1,0 +1,4 @@
+cpuprofile
+
+A simple modification to the cProfile module to use CPU time instead of wall
+clock time.  All interfaces are identical.
