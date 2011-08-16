@@ -150,7 +150,8 @@ class WiseguyWSGIHandler(simple_server.ServerHandler):
 class SocketFileWrapper(object):
   """A simple wrapper to keep track of the bytes read.
 
-  This is not complete and may break, but it is complete enough for our needs.
+  This is not complete and may break - for instance if people start sending
+  us data with 'Transfer-Encoding: chunked', but it works for now.
   """
   def __init__(self, _file, request_handler):
     self.file = _file
@@ -160,16 +161,21 @@ class SocketFileWrapper(object):
   def __getattr__(self, name):
     return getattr(self.file, name)
 
-  def read(self, *args):
-    if not args and self.request_handler.command == 'POST':
-      content_length = int(
-        self.request_handler.headers.getheader('Content-Length', -1))
-      if content_length < 0:
-        result = self.file.read(*args)
-      else:
-        result = self.file.read(content_length)
-    else:
-      result = self.file.read(*args)
+  def get_content_length(self):
+    cl = self.request_handler.headers.getheader('Content-Length')
+    if cl is None:
+      return cl
+    return int(cl)
+    
+  def read(self, size=-1):
+    if self.get_content_length() is None:
+      return ''
+    
+    if size < 0:
+      # read up to the content-length
+      size = self.get_content_length()
+
+    result = self.file.read(size)
     self._bytes_read += len(result)
     return result
 

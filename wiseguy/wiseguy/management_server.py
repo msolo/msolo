@@ -77,6 +77,7 @@ class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):
     '/server-resume-spawning': 'handle_resume_spawning',
     '/server-suspend-spawning': 'handle_suspend_spawning',
     '/server-set-max-rss': 'handle_set_max_rss',
+    '/server-set-max-total-mem': 'handle_set_max_total_mem',
     })
   
   def handle_set_max_rss(self):
@@ -86,6 +87,15 @@ class ManagementRequestHandler(embedded_http_server.EmbeddedRequestHandler):
       return 'OK.\n'
     except ValueError, e:
       logging.warning('ignored bizzare max_rss: %s', max_rss)
+      return 'ERROR.\n%s\n' % e
+
+  def handle_set_max_total_mem(self):
+    max_total_mem = self._get_int('max_total_mem', 0)
+    try:
+      self.server.fcgi_server.set_max_total_mem(max_total_mem)
+      return 'OK.\n'
+    except ValueError, e:
+      logging.warning('ignored bizzare max_total_mem: %s', max_total_mem)
       return 'ERROR.\n%s\n' % e
 
   def handle_resume_spawning(self):

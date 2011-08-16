@@ -32,6 +32,7 @@ class ManagedServer(object):
                bind_and_activate=True,
                fd_server_address=None,
                drop_privileges_callback=None,
+               max_total_mem=None,
                **kargs):
     """Construct the manager for a particular server instance.
     server_address - a (host, port) tuple or string
@@ -54,6 +55,7 @@ class ManagedServer(object):
     self._quit = False
     self._max_requests = max_requests
     self._max_rss = max_rss
+    self._max_total_mem = max_total_mem
     self._mem_stats = None
     self._request_count = 0
     self._skip_profile_requests = 0
@@ -339,6 +341,16 @@ class ManagedServer(object):
       self._max_rss = max_rss
     else:
       raise ValueError('max_rss %s out of sane bounds' % max_rss)
+
+  def set_max_total_mem(self, max_total_mem):
+    """Set max_total_mem in kb"""
+    max_total_mem = int(max_total_mem)
+    sane_lower_bound = 20 * 1024
+    sane_upper_bound = 4096 * 1024
+    if sane_lower_bound <= max_total_mem <= sane_upper_bound:
+      self._max_total_mem = max_total_mem
+    else:
+      raise ValueError('max_total_mem %s out of sane bounds' % max_total_mem)
 
   def set_profile_memory(self, profile_memory, min_delta=None):
     self._profile_memory = profile_memory

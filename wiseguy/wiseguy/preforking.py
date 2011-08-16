@@ -24,8 +24,8 @@ class PreForkingMixIn(object):
                  signal.SIGHUP)
   alarm_interval = None
   check_interval = 1
-  rss_check_interval = 30
-  last_rss_check_time = 0
+  mem_check_interval = 30
+  last_mem_check_time = 0
   
   def parent_signal_handler(self, signalnum, stack_frame):
     if signalnum != signal.SIGALRM:
@@ -92,23 +92,82 @@ class PreForkingMixIn(object):
     # FIXME: might want to fork off this new children first, presuming
     # there are resources to do so, then kill the unruly children. this
     # might result in smoother response times
-    if (self.last_rss_check_time and
-        self.last_rss_check_time + self.rss_check_interval < time.time()):
+    if (self.last_mem_check_time and
+        self.last_mem_check_time + self.mem_check_interval > time.time()):
       return
-      
-    if not self._quit and self._max_rss and self._allow_spawning:
-      for pid in self.child_pids:
+
+    if not self._quit and self._allow_spawning:
+      # We kill children using max-rss (per child) or max-total-mem
+      killed = {}
+      if self._max_rss:
+        for pid in self.child_pids:
+          try:
+            rss = resource_manager.get_memory_usage(pid)['VmRSS']
+          except resource_manager.MemoryException, e:
+            logging.warning('resource manager error pid: %s %s', pid, e)
+            continue
+          if rss > self._max_rss:
+            logging.info('kill child pid: %s, rss: %s', pid, rss)
+            _kill(pid, signal.SIGTERM)
+            killed[pid] = True
+            # fixme: sigterm is ok for now, but we might need to escalate to a
+            # sigkill at some point
+
+      if self._max_total_mem:
+        mem_usage = []
         try:
-          rss = resource_manager.get_memory_usage(pid)['VmRSS']
+          for pid in self.child_pids:
+            if pid in killed: # we killed this guy above already
+              continue
+            mem_usage.append((resource_manager.get_memory_usage(pid), pid))
         except resource_manager.MemoryException, e:
-          logging.warning('resource manager error pid: %s %s', pid, e)
-          continue
-        if rss > self._max_rss:
-          logging.info('kill child pid: %s, rss: %s', pid, rss)
-          _kill(pid, signal.SIGTERM)
-          # fixme: sigterm is ok for now, but we might need to escalate to a
-          # sigkill at some point
-      self.last_rss_check_time = time.time()
+          logging.warning('resource manager error: %s', e)
+          return
+
+        # we assume swap is private (there is no way to find the
+        # shared component of swap)
+
+        total_private_mem = sum(mem['private'] + mem['swap']
+                                for mem, pid in mem_usage)
+        max_shared_mem = max(mem['shared'] for mem, pid in mem_usage)
+        total_in_use = max_shared_mem + total_private_mem
+        logging.debug('checking children total in use %s. max %s',
+                      total_in_use, self._max_total_mem)
+        if total_in_use >= self._max_total_mem:
+          # children too fat, we will kill some
+          overage = total_in_use - self._max_total_mem
+
+          mem_usage.sort(key=lambda p:(p[0]['private'] + p[0]['swap']))
+
+          # Kill chilren, largest first, until we are just below
+          # limit. This means we might go over limit right after the
+          # first re-spwan and we will kill more - that is ok as it
+          # provides automatic jitter.
+          freed_private_mem = 0
+          while mem_usage and freed_private_mem < overage:
+            mem, pid = mem_usage.pop()
+            logging.info('kill child pid: %s, pvt-mem: %s', pid,
+                         mem['private'])
+            _kill(pid, signal.SIGTERM)
+            freed_private_mem += mem['private']
+            
+          # and kill one more for good luck (or to add hysteresis)
+          if not mem_usage:
+            logging.error("Killed all of our children trying to reclaim RAM.")
+          else:
+            mem, pid = mem_usage.pop()
+            logging.info('kill child pid: %s, pvt-mem: %s', pid,
+                         mem['private'])
+            _kill(pid, signal.SIGTERM)
+            
+          mem_per_worker_estimate = ((self._max_total_mem - max_shared_mem)
+                                     / self._workers)
+          logging.info('max-total=%s. num_workers=%s. shared-in-use=%s.'
+                       'this leaves each worker private-mem=%s.',
+                       self._max_total_mem, self._workers, max_shared_mem,
+                       mem_per_worker_estimate)
+
+      self.last_mem_check_time = time.time()
 
   def manage_children(self):
     # NOTE: this code looks a little fishy to me, too much sharing of data
@@ -155,7 +214,7 @@ class PreForkingMixIn(object):
       if not pid:
         time.sleep(self.check_interval)
         self.check_children()
-      
+
       while (not self._quit and
              len(self.child_pids) < self._workers):
         if not self._allow_spawning:
@@ -326,7 +385,12 @@ class PreForkingMixIn(object):
       last_profile_link = os.path.join(
         os.path.dirname(self._profile.filename),
         last_profile_symlink_name)
-      os.symlink(self._profile.filename, last_profile_link)
+      try:
+        os.symlink(self._profile.filename, last_profile_link)
+      except OSError, e:
+        if e[0] not in (errno.EEXIST,):
+          logging.exception("error creating symlink %s",
+                            self._profile.filename)
       
     self.exit_child()
 

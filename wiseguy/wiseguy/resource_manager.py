@@ -58,9 +58,35 @@ def linux_get_memory_usage(pid):
     for key in vm_keys:
       if key not in mem_stats:
         raise MemoryException('missing key: %s' % key)
+
+    shared, private, swap = get_smaps_memory(pid)
+    mem_stats['shared'] = shared
+    mem_stats['private'] = private
+    mem_stats['swap'] = swap
+
     return mem_stats
   except Exception, e:
     raise MemoryException("unexpected error: %s" % e)
+
+def get_smaps_memory(pid):
+  """Returns (shared_memory, private_memory) in kb"""
+  smaps_file = open('/proc/%s/smaps' % pid)
+  private_mem = 0
+  shared_mem = 0
+  swap_mem = 0
+  for line in smaps_file:
+    if line[:7] == 'Private':
+      # line =~ 'Private_Dirty:        12 kB'
+      # hope it's always 'kB'
+      _, value, unit = line.split()
+      private_mem += int(value)
+    elif line[:6] == 'Shared':
+      _, value, unit = line.split()
+      shared_mem += int(value)
+    elif line[:5] == 'Swap:':
+      _, value, unit = line.split()
+      swap_mem += int(value)
+  return shared_mem, private_mem, swap_mem
 
 if sys.platform == 'linux2':
   get_memory_usage = linux_get_memory_usage

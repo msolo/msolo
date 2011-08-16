@@ -78,7 +78,7 @@ class FCGIServer(managed_server.ManagedServer):
 
     # 0 is 'flags' - I hate magic parameters
     self._fcgi_request = fcgi.Request(
-      self._listen_fd, 0, self._accept_input_timeout)
+      self._listen_fd, 0)
     super(FCGIServer, self).server_activate()
 
   def get_request(self):
