@@ -301,6 +301,20 @@ class BrowseableStats(pstats.Stats):
     d['func_name'] = pstats.func_std_string(func)
     return d
 
+  def module_stats(self):
+    module_map = {}
+    for func, (cc, nc, tt, ct, callers) in self.stats.iteritems():
+      module_path = func[0]
+      if module_path == '~':
+        module_path = func[-1]
+      try:
+        module_map[module_path] += tt
+      except KeyError:
+        module_map[module_path] = tt
+
+    for tt, module in sorted(((tt, module) for module, tt in module_map.iteritems())):
+      print tt, module
+
   def min_call_count_filter(self, call_count):
     def filter_function(function_list):
       results = []
