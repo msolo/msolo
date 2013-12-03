@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 static char global_error_string[256];
-static char global_data_buffer[256];
+static char global_data_buffer[] = {'\0'};
 
 #define UNIX_SOCKET_PATH "/tmp/pyzy.sock"
 
@@ -29,25 +29,20 @@ int seterr(const char *fmt, ...)
 
 int open_unix_socket(const char *path)
 {
-  int fd;
+  int fd = -1;
   struct sockaddr_un addr;
-  socklen_t addrlen;
-  size_t pathlen;
-  size_t max_pathlen;
+  socklen_t addrlen = sizeof(struct sockaddr_un);
+  size_t pathlen = strlen(path);
+  size_t max_pathlen = sizeof(addr.sun_path) - 1;
 
+  memset(&addr, 0, addrlen);
   addr.sun_family = AF_UNIX;
 
   if (path == NULL)
-    return seterr("The path cannot be NULL");
-  if ((pathlen = strlen(path)) > (max_pathlen = sizeof(addr.sun_path) - 1))
-    return seterr("The path cannot be longer than %u characters", max_pathlen);
-  strcpy(addr.sun_path, path);
-
-  addrlen = sizeof(addr) - sizeof(addr.sun_path) + pathlen;
-
-  #if _XOPEN_VERSION >= 600
-  addr.sun_len = addrlen;
-  #endif
+    return seterr("path cannot be NULL");
+  if (pathlen > max_pathlen)
+    return seterr("path cannot be longer than %u characters", max_pathlen);
+  strncpy(addr.sun_path, path, pathlen);
 
   if ((fd = socket(PF_UNIX, SOCK_STREAM, 0)) < 0)
     return seterr("socket() failed: %s", strerror(errno));
@@ -56,30 +51,27 @@ int open_unix_socket(const char *path)
   return fd;
 }
 
-int send_fd(unix_fd, fd)
+int send_fd(int unix_fd, int fd)
 {
   int n;
   struct msghdr msg;
   struct iovec iov;
   struct cmsghdr *cmsg;
   int myfds[1];
+  
   char buf[CMSG_SPACE(sizeof(myfds))];
   int *fdptr;
 
   myfds[0] = fd;
-
+  memset(&msg, 0, sizeof(struct msghdr));
+  memset(&iov, 0, sizeof(struct iovec));
   iov.iov_base = global_data_buffer;
-  iov.iov_len = strlen(global_data_buffer) + 1;
+  iov.iov_len = 1;
 
-  char* msg_name = "launchctl";
-
-  msg.msg_name = msg_name;
-  msg.msg_namelen = strlen(msg_name);
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;
   msg.msg_control = buf;
   msg.msg_controllen = sizeof(buf);
-  msg.msg_flags = 0;
 
   cmsg = CMSG_FIRSTHDR(&msg);
   cmsg->cmsg_level = SOL_SOCKET;
@@ -89,7 +81,8 @@ int send_fd(unix_fd, fd)
   memcpy(fdptr, myfds, sizeof(myfds));
   msg.msg_controllen = cmsg->cmsg_len;
 
-  if ((n = sendmsg(unix_fd, &msg, 0)) < 0)
+  n = sendmsg(unix_fd, &msg, 0);
+  if (n < 0)
     return seterr("sendmsg() failed: %s", strerror(errno));
 
   return 0;
@@ -133,19 +126,24 @@ int send_launch_ctl(int unix_fd, int argc, char** argv)
   
   env[0] = '\0';
   char* env_var_name = NULL;
+  char* env_val = NULL;
   int i = 0;
+  strcat(env, "PYZY_ENV=1\n");
   while (1) {
     env_var_name = environment_var_list[i++];
     if (!env_var_name) {
       break;
     }
-    strcat(env, env_var_name);
-    strcat(env, "=");
-    strcat(env, getenv(env_var_name));
-    strcat(env, "\n");
+    env_val = getenv(env_var_name);
+    if (env_val != NULL) {
+      strcat(env, env_var_name);
+      strcat(env, "=");
+      strcat(env, env_val);
+      strcat(env, "\n");
+    }
   }
 
-  printf("env: %s\n", env);
+  // printf("env: %s\n", env);
   if (rc = send_string(unix_fd, env)) {
     return rc;
   }
@@ -153,15 +151,21 @@ int send_launch_ctl(int unix_fd, int argc, char** argv)
     return rc;
   }
   for (i = 0; i < argc; i++) {
-    //printf("arg %d %s\n", i, argv[i]);
+    // printf("arg %d %s\n", i, argv[i]);
     if (rc = send_string(unix_fd, argv[i])) {
       return rc;
     }
   }
     
-  send_fd(unix_fd, STDIN_FILENO);
-  send_fd(unix_fd, STDOUT_FILENO);
-  send_fd(unix_fd, STDERR_FILENO);
+  if (rc = send_fd(unix_fd, STDIN_FILENO)) {
+    return rc;
+  }
+  if (rc = send_fd(unix_fd, STDOUT_FILENO)) {
+    return rc;
+  }
+  if (rc = send_fd(unix_fd, STDERR_FILENO)) {
+    return rc;
+  }
   return 0;
 }
 
@@ -188,6 +192,7 @@ int recv_return_code(int unix_fd)
   return return_codes[0];
 }
 
+// FIXME: Catch a few more signals? TERM, HUP?
 int signal_handler(int signal_num)
 {
   printf("signal_handler: %d, send\n", signal_num);
