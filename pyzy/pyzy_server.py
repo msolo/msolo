@@ -1,7 +1,6 @@
-#!/usr/bin/env python2.6
+#!/usr/bin/env python2.7
 
 import errno
-import logging
 import _multiprocessing
 import optparse
 import os
@@ -39,6 +38,7 @@ class PyZyServer(object):
     script_set = set()
     while True:
       try:
+        # This needs a separate thread loop to keep the zombies at bay.
         while os.waitpid(-1, os.WNOHANG)[0]:
           pass
       except OSError, e:
@@ -62,27 +62,37 @@ class PyZyServer(object):
       argv = [self.recv_str(client_sock) for x in range(argc)]
       script = os.path.abspath(argv[1])
 
-      #fork = (script in script_set)
-      fork = True
+      # Only fork when we have already loaded code for this
+      # application into this interpreter.
+      fork = (script in script_set)
+      #fork = True
       script_set.add(script)
 
       if fork and os.fork() != 0:
-        # parent process
+        # parent process, just go waitpid
         continue
-      else:
+
+      # child process, or the main process when we first cache
+      if client_env.get('PYTHONPATH', ''):
         sys.path[0:0] = client_env.get('PYTHONPATH', '').split(':')
 
-      print >> sys.stderr, script, 'fork', fork, client_env, argc, argv
-      fd = client_sock.fileno()
-      stdin_fd = _multiprocessing.recvfd(fd)
-      stdout_fd = _multiprocessing.recvfd(fd)
-      stderr_fd = _multiprocessing.recvfd(fd)
+      #print >> sys.stderr, script, 'fork', fork, client_env, argc, argv
+      try:
+        fd = client_sock.fileno()
+        stdin_fd = _multiprocessing.recvfd(fd)
+        stdout_fd = _multiprocessing.recvfd(fd)
+        stderr_fd = _multiprocessing.recvfd(fd)
 
-      sys.stdin = os.fdopen(stdin_fd, 'r')
-      sys.stdout = os.fdopen(stdout_fd, 'w')
-      sys.stderr = os.fdopen(stderr_fd, 'w')
-      sys.argv = argv[1:]
-      sys.exit = pyzy_exit
+        sys.stdin = os.fdopen(stdin_fd, 'r')
+        sys.stdout = os.fdopen(stdout_fd, 'w')
+        sys.stderr = os.fdopen(stderr_fd, 'w')
+        sys.argv = argv[1:]
+        sys.exit = pyzy_exit
+        os.chdir(os.environ['PWD'])
+      except Exception as e:
+        print >> sys.stderr, e
+        if fork:
+          os._exit(0)
 
       pid = os.getpid()
       client_sock.send(struct.pack('!I', pid))
@@ -90,16 +100,20 @@ class PyZyServer(object):
       return_code = 0
       try:
         try:
+          # Post-fork, this goes to the client. Need a log file.
+          # print >> sys.stderr, "module count preload:", len([name for name, mod in sys.modules.iteritems() if mod])
           execfile(argv[1])
         except PyZySystemExit, e:
           return_code = e[0]
         except Exception, e:
           print >> sys.stderr, e
           return_code = 1
+        #print >> sys.stderr, "module count postexec:", len([name for name, mod in sys.modules.iteritems() if mod])
+        #print >> sys.stderr, "send reply", return_code, pid
         client_sock.send(struct.pack('!II', return_code, pid))
       finally:
         if fork:
-          print >> sys.stderr, "exitting"
+          #print >> sys.stderr, "exitting"
           os._exit(0)
         else:
           for key in os.environ:
@@ -111,7 +125,6 @@ class PyZyServer(object):
 
 def main():
   try:
-    logging.basicConfig()
     server = PyZyServer()
     server.connect()
     server.serve_forever()
